@@ -181,11 +181,11 @@ $("generateBtn").addEventListener("click", async () => {
     const files = new Map(rows.map(row => [row.name, row.blob]));
     let referenceFile = $("refAudio").files[0] || files.get("prompt-hayfa.wav");
     let referenceText = $("refText").value.trim();
-    if (!referenceFile && !referenceText) throw new Error("The model bundle has no Hayfa prompt. Add a reference WAV and its exact transcript.");
-    if ($("refAudio").files[0] && !referenceText) throw new Error("Enter the exact transcript for your custom reference recording.");
     if (!referenceText && files.has("prompt-hayfa.txt")) referenceText = (await files.get("prompt-hayfa.txt").text()).trim();
+    if (!referenceFile) throw new Error("No reference WAV found. Import the Hayfa prompt or choose a custom reference recording.");
+    if (!referenceText) throw new Error("The exact reference transcript is required. Add the matching text for the selected WAV.");
 
-    const refAudio = referenceFile ? await decodeAudioFile(referenceFile) : null;
+    const refAudio = await decodeAudioFile(referenceFile);
     const started = performance.now();
     const samples = await engine.generate(text, {
       refAudio,
