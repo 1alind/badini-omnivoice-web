@@ -23,25 +23,39 @@ function openDB() {
 }
 async function putFiles(files) {
   const db = await openDB();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    for (const file of files) tx.objectStore(STORE).put({ name: file.name, blob: file, size: file.size, type: file.type });
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
-  });
-  db.close();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      const store = tx.objectStore(STORE);
+      // A newly selected manifest marks a complete model replacement.
+      if (files.some(file => file.name === "manifest.json")) store.clear();
+      for (const file of files) store.put({ name: file.name, blob: file, size: file.size, type: file.type });
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error("Model import transaction aborted."));
+    });
+  } finally {
+    db.close();
+  }
 }
 async function readFiles() {
   let rows = [];
+  // If IndexedDB quota is exceeded during replacement, don't mix the new
+  // session-only bundle with stale files from the previous persistent bundle.
+  const replacingSessionBundle = volatileFiles.has("manifest.json");
   try {
-    const db = await openDB();
-    rows = await new Promise((resolve, reject) => {
-      const request = db.transaction(STORE).objectStore(STORE).getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    db.close();
+    if (!replacingSessionBundle) {
+      const db = await openDB();
+      try {
+        rows = await new Promise((resolve, reject) => {
+          const request = db.transaction(STORE).objectStore(STORE).getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      } finally {
+        db.close();
+      }
+    }
   } catch {}
   const merged = new Map(rows.map(row => [row.name, row]));
   for (const [name, blob] of volatileFiles) {
@@ -129,11 +143,13 @@ $("modelFiles").addEventListener("change", async event => {
   loadedFiles = new Map();
   $("engineStatus").textContent = "ENGINE OFF";
   $("generateBtn").disabled = true;
+  if (selected.some(file => file.name === "manifest.json")) volatileFiles.clear();
   for (const file of selected) volatileFiles.set(file.name, file);
   $("modelStatusText").textContent = "Importing model files…";
   try {
     await putFiles(selected);
-    for (const file of selected) volatileFiles.delete(file.name);
+    if (selected.some(file => file.name === "manifest.json")) volatileFiles.clear();
+    else for (const file of selected) volatileFiles.delete(file.name);
     try { await navigator.storage?.persist?.(); } catch {}
     $("generationStatus").textContent = "Files imported and saved locally. Load the model to begin.";
   } catch (error) {
