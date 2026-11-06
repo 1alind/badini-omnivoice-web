@@ -2,7 +2,7 @@
 
 Do not commit model weights or generated prompt-token files to this repository.
 
-The Colab build first exports the fine-tuned checkpoint `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`) into four FP32 ONNX graphs, then dynamically quantizes **only the LLM's constant MatMul weights** to INT8 using standard ONNX operators:
+The Colab build first exports the fine-tuned checkpoint `Dezheen89/omnivoice` (Badini Kurdish, `kmr`) into four FP32 ONNX graphs, then dynamically quantizes **only the LLM's constant MatMul weights** to INT8 using standard ONNX operators:
 
 - `audio_embeddings_encoder.onnx` and external data: FP32
 - `llm_decoder.onnx` and external data: INT8 weights with `DynamicQuantizeLinear` + `MatMulInteger`
