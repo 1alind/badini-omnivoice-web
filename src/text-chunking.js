@@ -14,7 +14,7 @@ function splitLongWord(word, referenceText, referenceFrames, maxFrames) {
   return parts;
 }
 
-function splitTextIntoChunks(text, referenceText, referenceFrames, maxFrames) {
+export function splitTextIntoChunks(text, referenceText, referenceFrames, maxFrames) {
   const sentences = text.match(/[^.!?؟۔…]+[.!?؟۔…]?/gu) || [text];
   const chunks = [];
   let current = "";
@@ -47,7 +47,7 @@ function splitTextIntoChunks(text, referenceText, referenceFrames, maxFrames) {
   return chunks.length ? chunks : [text.trim()];
 }
 
-function joinPcm(chunks, sampleRate, pauseSeconds = 0.18) {
+export function joinPcm(chunks, sampleRate, pauseSeconds = 0.18) {
   const pause = Math.round(sampleRate * pauseSeconds);
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0) + pause * Math.max(0, chunks.length - 1);
   const output = new Float32Array(total);
