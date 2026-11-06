@@ -13,7 +13,7 @@ The Colab build first exports the fine-tuned checkpoint `Dezheen89/omnivoice-bad
 - `manifest.json`
 - Pre-encoded voice/emotion token files (`.i32`) and exact transcripts listed in `manifest.json`
 
-The quantizer compares the INT8 LLM against the FP32 reference before replacing it. Activations remain FP32. The manifest marks the `mobile-int8-weight-only` profile so the browser runs the LLM and Higgs decoder through WASM, while audio embeddings and audio heads may use WebGPU. The app falls back to all-WASM if the mixed path fails.
+The quantizer compares the INT8 LLM against the FP32 reference before replacing it. Graph inputs and outputs remain FP32, while activations are dynamically quantized inside standard ONNX operators. The manifest marks the `mobile-int8-dynamic-wasm` profile so the browser runs the LLM and Higgs decoder through WASM, while audio embeddings and audio heads may use WebGPU. The app falls back to all-WASM if the mixed path fails.
 
 Hayfa's natural reference sample is taken from the fine-tuned model repository itself. Additional voice/emotion samples come from `Dezheen89/cosyvoice`. All samples are encoded with the Higgs Audio V2 codec from `k2-fsa/OmniVoice`; CosyVoice model weights are not included or used.
 
