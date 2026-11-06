@@ -121,6 +121,7 @@ $("textInput").addEventListener("input", () => {
 
 $("modelFiles").addEventListener("change", async event => {
   const selected = [...event.target.files];
+  event.target.value = "";
   if (!selected.length) return;
   await engine?.dispose();
   engine = null;
