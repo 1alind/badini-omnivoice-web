@@ -18,7 +18,7 @@ The browser runtime uses ONNX Runtime Web. The mobile INT8 LLM and Higgs decoder
 ## No inference server
 
 - No Python backend, inference API, cloud GPU, analytics, telemetry, or CDN calls during speech generation.
-- The static app and runtime assets are downloaded from the host once and precached by the service worker.
+- The static app and runtime assets are downloaded from the host once and precached by the service worker. On first visit, let the service worker install and reload the page once; its same-origin isolation headers enable multi-threaded WASM where Safari supports it. Single-thread WASM remains the fallback.
 - The model bundle is imported into browser storage. IndexedDB is used when available; otherwise files remain in memory for the current tab.
 - After the app and model bundle are cached, speech generation is designed to work offline.
 
