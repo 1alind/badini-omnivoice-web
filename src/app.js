@@ -191,7 +191,7 @@ $("clearBtn").addEventListener("click", async () => {
   engine = null;
   loadedManifest = null;
   loadedFiles = new Map();
-  await removeFiles();
+  try { await removeFiles(); } catch {}
   volatileFiles.clear();
   renderFiles([]);
   $("engineStatus").textContent = "ENGINE OFF";
