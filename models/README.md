@@ -1,11 +1,11 @@
 # Model bundle
 
-Do not commit model weights or prompt WAV files to this repository.
+Do not commit model weights or generated prompt-token files to this repository.
 
-The browser app expects an ONNX export of the **fine-tuned** checkpoint `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The Colab build exports the FP32 backbone, then converts only constant LLM MatMul weights to mobile INT8 and updates the manifest. The bundle contains:
+The browser app expects an ONNX export of the **fine-tuned** checkpoint `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The Colab build exports FP32 graphs and splits large external weight data into separate files:
 
 - `audio_embeddings_encoder.onnx` and its external data
-- `llm_decoder.onnx` and its external data (INT8 weight-only)
+- `llm_decoder.onnx` and its external data
 - `audio_heads_decoder.onnx` and its external data
 - `higgs_decoder.onnx` and its external data
 - `tokenizer.json`
@@ -13,8 +13,8 @@ The browser app expects an ONNX export of the **fine-tuned** checkpoint `Dezheen
 - `manifest.json`
 - Pre-encoded voice/emotion token files (`.i32`) and exact transcripts listed in `manifest.json`
 
-The reference prompt files are downloaded from `Dezheen89/cosyvoice` and are used only as voice-cloning prompts. The CosyVoice model weights are not included or used.
+The reference audio samples are downloaded from `Dezheen89/cosyvoice`, then encoded with the Higgs Audio V2 codec from `k2-fsa/OmniVoice`. The CosyVoice model weights are not included or used.
 
-Generate the bundle with `notebooks/export_badini_omnivoice.ipynb`. Before importing it on the iPad, run `tools/validate_bundle.py` (the notebook does this automatically). Select all extracted files together in the browser app.
+Generate the bundle with `notebooks/export_badini_omnivoice.ipynb`. The notebook runs `tools/validate_bundle.py` before download. Select all extracted files together in the browser app.
 
-The frontend runs the four-graph OmniVoice inference pipeline in ONNX Runtime Web. The LLM INT8 graph and Higgs decoder are assigned to WASM; audio embedding and audio-head graphs may use WebGPU when available. The prompt WAVs are encoded once during model export; browser inference consumes only the resulting audio-token IDs. Actual audio quality, memory use, and generation speed still require validation on the target iPad.
+The frontend runs the four-graph OmniVoice pipeline in ONNX Runtime Web. The app tries WebGPU for the backbone graphs when available and uses WASM for the Higgs decoder, with an all-WASM fallback. Reference prompts are pre-encoded during the one-time export, so Safari does not need to encode raw prompt audio.
