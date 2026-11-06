@@ -14,6 +14,8 @@ from pathlib import Path
 import torch
 
 
+EXPORT_EXTERNAL_THRESHOLD = 1024
+
 def export_module(module, args, path: Path, input_names, output_names, dynamic_axes):
     import onnx
     torch.onnx.export(
@@ -33,7 +35,7 @@ def export_module(module, args, path: Path, input_names, output_names, dynamic_a
         all_tensors_to_one_file=True,
         location=data_name,
         convert_attribute=False,
-        size_threshold=(2**31 - 1) if args.dtype == "fp16" else 1024,
+        size_threshold=EXPORT_EXTERNAL_THRESHOLD,
     )
     print(f"Exported {path.name} (+ {data_name} when needed)")
 
@@ -76,6 +78,8 @@ def main():
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cuda")
     parser.add_argument("--dtype", choices=["fp16", "fp32"], default="fp16")
     args = parser.parse_args()
+    global EXPORT_EXTERNAL_THRESHOLD
+    EXPORT_EXTERNAL_THRESHOLD = (2**31 - 1) if args.dtype == "fp16" else 1024
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
