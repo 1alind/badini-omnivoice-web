@@ -95,14 +95,34 @@ def main():
     quantization = manifest.get("quantization")
     if quantization and quantization.get("bits") == 8:
         llm = onnx.load(str(root / "llm_decoder.onnx"), load_external_data=False)
-        nbits = sum(1 for node in llm.graph.node if node.domain == "com.microsoft" and node.op_type == "MatMulNBits")
-        if nbits == 0:
-            raise SystemExit("ERROR: manifest claims INT8 but the LLM graph has no MatMulNBits nodes")
+        matmul_integer = sum(
+            1 for node in llm.graph.node
+            if node.domain in ("", "ai.onnx") and node.op_type == "MatMulInteger"
+        )
+        dynamic_quantize = sum(
+            1 for node in llm.graph.node
+            if node.domain in ("", "ai.onnx") and node.op_type == "DynamicQuantizeLinear"
+        )
+        nbits = sum(
+            1 for node in llm.graph.node
+            if node.domain == "com.microsoft" and node.op_type == "MatMulNBits"
+        )
+        if nbits:
+            raise SystemExit("ERROR: WASM-compatible bundle must not contain MatMulNBits")
+        if matmul_integer == 0 or dynamic_quantize == 0:
+            raise SystemExit(
+                "ERROR: INT8 LLM must use standard ONNX DynamicQuantizeLinear + MatMulInteger"
+            )
         if sessions["llm"].get("executionProvider") != "wasm":
             raise SystemExit("ERROR: mobile INT8 LLM must use the WASM execution provider")
         if sessions["higgsDecoder"].get("executionProvider") != "wasm":
             raise SystemExit("ERROR: Higgs decoder must use WASM for the validated audio path")
-        print(f"OK: mobile INT8 LLM · MatMulNBits nodes={nbits}")
+        if quantization.get("format") != "ONNX DynamicQuantizeLinear + MatMulInteger":
+            raise SystemExit("ERROR: manifest does not declare the WASM-compatible INT8 format")
+        print(
+            "OK: mobile WASM INT8 LLM · "
+            f"MatMulInteger nodes={matmul_integer}; DynamicQuantizeLinear nodes={dynamic_quantize}"
+        )
     total = sum(path.stat().st_size for path in root.iterdir() if path.is_file())
     print(f"\nBundle validation passed. Voice prompts: {valid}; files: {sum(1 for p in root.iterdir() if p.is_file())}; size: {total / 1e9:.2f} GB")
 
