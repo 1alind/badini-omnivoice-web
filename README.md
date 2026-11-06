@@ -7,17 +7,17 @@ A static, offline-first web app for generating Badini Kurdish speech using the f
 - Imports ONNX model files from the user's device.
 - Stores them in browser IndexedDB.
 - Runs the OmniVoice inference loop in JavaScript with ONNX Runtime Web.
-- Uses the model's Hayfa reference audio and transcript, or a user-provided reference recording.
+- Uses Hayfa, Abdullah, and Bafreen reference recordings (including available emotion samples), or a user-provided reference recording.
 - Exports generated speech as 24 kHz mono WAV.
 - Caches the static app/runtime locally so it can be reopened offline after the first visit.
 
-**No inference server, cloud GPU, API endpoint, analytics, or CDN is used by the app.** The static page must be downloaded once from its host. Model conversion is a separate one-time Colab build step. After the app and model bundle have been imported, generation is local.
+**No inference server, inference API, analytics, or CDN is used by the app.** The static page must be downloaded once from its host. A cloud GPU is used only for the one-time model conversion in Colab; it is not involved in speech generation. After the app and model bundle have been imported, generation is local.
 
 ## 1. Export the model bundle
 
 Open the [Colab export notebook](https://colab.research.google.com/github/1alind/badini-omnivoice-web/blob/main/notebooks/export_badini_omnivoice.ipynb) and run its cells.
 
-Default checkpoint: `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The notebook exports the fine-tuned checkpoint, not the base OmniVoice weights. It creates a ZIP containing:
+Default checkpoint: `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The notebook exports the fine-tuned checkpoint, not the base OmniVoice weights. It also downloads small reference WAV/TXT pairs from `Dezheen89/cosyvoice`. Those clips are used only as zero-shot voice prompts; no CosyVoice model weights are included. It creates a ZIP containing:
 - `omnivoice_lm.onnx` and optional external weight data
 - `audio_encoder.onnx` and `audio_decoder.onnx`
 - tokenizer JSON files
@@ -43,7 +43,7 @@ Alternatively, run `npm install` then `npm run build` and host the `dist/` folde
 4. Tap **Load model on this iPad**.
 5. Wait for the model to load, then enter Badini text and generate.
 
-The app stores the imported model files in IndexedDB. Safari storage limits vary by device and available space; if import fails, check iPad storage. Keep Safari open while loading.
+The app tries to store imported model files in IndexedDB. If Safari's storage quota rejects the large bundle, the files remain usable in the current tab only. Keep Safari open during loading and generation; after a tab-only import, you must select the files again after closing or reloading.
 
 ## Browser limitations
 
