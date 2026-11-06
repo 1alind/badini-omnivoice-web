@@ -1,0 +1,12 @@
+This project includes an adapted browser inference implementation based on:
+
+OmniVoice Web
+Copyright 2026 Xiaomi Corp. (authors include Han Zhu)
+Source: https://github.com/AnEntrypoint/omnivoice
+License: Apache License 2.0
+
+The adapted browser inference engine and sampling utilities are distributed under the Apache License 2.0. See LICENSE-APACHE-2.0.
+
+The remaining original project files are provided under the MIT License in LICENSE.
+
+Model weights and Higgs Audio V2 tokenizer assets are separate works with separate license terms. Review the upstream model and tokenizer licenses before redistribution.
