@@ -20,30 +20,72 @@ function tensorToFloat32(tensor) {
 }
 
 function normalizePcm(input, refRms = null) {
-  let start = 0;
-  let end = input.length;
-  const threshold = 0.0005;
-  while (start < end && Math.abs(input[start]) < threshold) start += 1;
-  while (end > start && Math.abs(input[end - 1]) < threshold) end -= 1;
-  const pcm = input.slice(start, end);
-  if (refRms !== null && refRms > 0 && refRms < 0.1) {
+  let pcm = new Float32Array(input);
+  const sampleRate = 24000;
+  const windowSize = 240;
+  const threshold = Math.pow(10, -50 / 20);
+  const windows = Math.ceil(pcm.length / windowSize);
+  const active = new Uint8Array(windows);
+  for (let w = 0; w < windows; w += 1) {
+    const start = w * windowSize;
+    const end = Math.min(pcm.length, start + windowSize);
+    let energy = 0;
+    for (let i = start; i < end; i += 1) energy += pcm[i] * pcm[i];
+    active[w] = Math.sqrt(energy / Math.max(1, end - start)) > threshold ? 1 : 0;
+  }
+  const pieces = [];
+  let cursor = 0;
+  let w = 0;
+  while (w < windows) {
+    if (active[w]) { w += 1; continue; }
+    const silentStart = w;
+    while (w < windows && !active[w]) w += 1;
+    const silentEnd = w;
+    if (silentEnd - silentStart > 50) {
+      const cutStart = Math.min(pcm.length, (silentStart + 25) * windowSize);
+      const cutEnd = Math.min(pcm.length, Math.max(cutStart, (silentEnd - 25) * windowSize));
+      if (cutStart > cursor) pieces.push(pcm.subarray(cursor, cutStart));
+      cursor = cutEnd;
+    }
+  }
+  if (cursor < pcm.length) pieces.push(pcm.subarray(cursor));
+  if (pieces.length > 1) {
+    const total = pieces.reduce((sum, piece) => sum + piece.length, 0);
+    const joined = new Float32Array(total);
+    let offset = 0;
+    for (const piece of pieces) { joined.set(piece, offset); offset += piece.length; }
+    pcm = joined;
+  }
+  let first = -1, last = -1;
+  for (let i = 0; i < active.length; i += 1) if (active[i]) { if (first < 0) first = i; last = i; }
+  if (first >= 0) {
+    const lead = first * windowSize;
+    const trail = pcm.length - (last + 1) * windowSize;
+    const left = lead > 2400 ? lead - 2400 : 0;
+    const right = trail > 2400 ? Math.min(pcm.length, (last + 1) * windowSize + 2400) : pcm.length;
+    pcm = pcm.slice(left, right);
+  }
+  if (refRms !== null && refRms < 0.1) {
     const scale = refRms / 0.1;
-    for (let index = 0; index < pcm.length; index += 1) pcm[index] *= scale;
+    for (let i = 0; i < pcm.length; i += 1) pcm[i] *= scale;
+  } else if (refRms === null) {
+    let peak = 0;
+    for (const sample of pcm) peak = Math.max(peak, Math.abs(sample));
+    if (peak > 1e-6) {
+      const scale = 0.5 / peak;
+      for (let i = 0; i < pcm.length; i += 1) pcm[i] *= scale;
+    }
   }
-  let peak = 0;
-  for (const sample of pcm) peak = Math.max(peak, Math.abs(sample));
-  if (peak > 0) {
-    const scale = Math.min(0.95 / peak, 3);
-    for (let index = 0; index < pcm.length; index += 1) pcm[index] *= scale;
+  const fade = Math.min(Math.floor(sampleRate * 0.1), Math.floor(pcm.length / 2));
+  for (let i = 0; i < fade; i += 1) {
+    const gain = fade <= 1 ? 0 : i / (fade - 1);
+    pcm[i] *= gain;
+    pcm[pcm.length - 1 - i] *= 1 - gain;
   }
-  const fade = Math.min(2400, Math.floor(pcm.length / 2));
-  for (let index = 0; index < fade; index += 1) {
-    const gain = fade <= 1 ? 0 : index / (fade - 1);
-    pcm[index] *= gain; pcm[pcm.length - 1 - index] *= 1 - gain;
-  }
-  const padded = new Float32Array(pcm.length + 4800);
-  padded.set(pcm, 2400);
-  return padded;
+  const pad = Math.floor(sampleRate * 0.1);
+  const output = new Float32Array(pcm.length + pad * 2);
+  output.set(pcm, pad);
+  return output;
 }
 
 function bigintRange(length, batch) {
