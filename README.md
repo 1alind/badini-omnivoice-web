@@ -8,7 +8,7 @@ The browser app is intended to run the Badini fine-tuned weights, not the origin
 
 `Dezheen89/omnivoice`
 
-The checkpoint repository is the canonical `Dezheen89/omnivoice` URL. The exporter reads its exact `model.safetensors`, config and tokenizer. The ONNX export code reproduces the checkpoint architecture; it must not substitute weights from `k2-fsa/OmniVoice`.
+The checkpoint repository is `Dezheen89/omnivoice`. The exporter reads its exact `model.safetensors`, config and tokenizer. The OmniVoice Python package supplies only the architecture implementation for conversion. The `k2-fsa/OmniVoice` repository is used only for the Higgs Audio V2 codec needed to decode audio tokens. Its original TTS backbone weights are never substituted for the Badini checkpoint.
 
 ## What runs in the browser
 
