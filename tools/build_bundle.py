@@ -83,10 +83,16 @@ def main():
     a=p.parse_args()
     out=Path(a.out).resolve(); work=Path(a.work).resolve()
     out.mkdir(parents=True,exist_ok=True); work.mkdir(parents=True,exist_ok=True)
-    voice_revision = model_info(a.model_id).sha
+    voice_info = model_info(a.model_id)
+    # Hugging Face may redirect a renamed repository ID. Resolve the Hub's
+    # canonical ID once, then use it for metadata, snapshots and prompt files.
+    resolved_model_id = getattr(voice_info, "id", None) or a.model_id
+    voice_revision = voice_info.sha
     higgs_revision = model_info(a.higgs_repo).sha
     reference_revision = model_info(a.reference_repo).sha
-    source=Path(snapshot_download(repo_id=a.model_id,revision=voice_revision,allow_patterns=["model.safetensors","config.json","tokenizer.json","tokenizer_config.json","chat_template.jinja","README.md"],local_dir=work/"fine-tuned-source"))
+    print(f"Requested checkpoint: {a.model_id}")
+    print(f"Resolved checkpoint:  {resolved_model_id} @ {voice_revision}")
+    source=Path(snapshot_download(repo_id=resolved_model_id,revision=voice_revision,allow_patterns=["model.safetensors","config.json","tokenizer.json","tokenizer_config.json","chat_template.jinja","README.md"],local_dir=work/"fine-tuned-source"))
     higgs_root=Path(snapshot_download(repo_id=a.higgs_repo,revision=higgs_revision,allow_patterns=["README.md","LICENSE","audio_tokenizer/**"],local_dir=work/"higgs-source"))
     higgs=higgs_root/"audio_tokenizer"
     if (source/"README.md").is_file():
@@ -101,7 +107,7 @@ def main():
         shutil.copy2(higgs / "LICENSE", out / "HIGGS_AUDIO_LICENSE.txt")
     codec=HiggsAudioV2TokenizerModel.from_pretrained(str(higgs),dtype=torch.float32)
     codec.eval()
-    prompts,sample_rate,hop=encode_prompts(codec,a.model_id,voice_revision,a.reference_repo,reference_revision,out)
+    prompts,sample_rate,hop=encode_prompts(codec,resolved_model_id,voice_revision,a.reference_repo,reference_revision,out)
     del codec
     for name in ("tokenizer.json","tokenizer_config.json"):
         if not (out/name).is_file(): raise RuntimeError(f"Missing {name}")
@@ -112,7 +118,7 @@ def main():
       "higgsDecoder":{"model":"higgs_decoder.onnx","externalData":external_files(out/"higgs_decoder.onnx"),"executionProvider":"wasm"},
     }
     manifest={
-      "model_id":a.model_id,"language":"kmr","sample_rate":sample_rate,"audio_hop_length":hop,"source_revisions":{"voice":voice_revision,"higgs":higgs_revision,"references":reference_revision},
+      "model_id":resolved_model_id,"requested_model_id":a.model_id,"language":"kmr","sample_rate":sample_rate,"audio_hop_length":hop,"source_revisions":{"voice":voice_revision,"higgs":higgs_revision,"references":reference_revision},
       "num_audio_codebooks":8,"precision":"fp32","reference_prompts":prompts,
       "runtime":{
         "sampleRate":sample_rate,"preferWebGpu":True,"hiddenSize":1024,"numKvHeads":8,"headDim":128,
