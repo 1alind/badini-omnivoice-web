@@ -106,7 +106,8 @@ $("loadBtn").addEventListener("click", async () => {
     const missing = REQUIRED.filter(name => !files.has(name));
     if (missing.length) throw new Error("Missing files: " + missing.join(", "));
     const manifest = files.has("manifest.json") ? JSON.parse(await files.get("manifest.json").text()) : {};
-    for (const external of manifest.lm_external_data || []) {
+    const sidecars = Object.values(manifest.external_data || {}).flat();
+    for (const external of sidecars) {
       if (!files.has(external)) throw new Error("Missing external weight file: " + external);
     }
     engine?.dispose();
