@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - name: Validate Python exporter and Colab notebook syntax
         run: |
-          python -m py_compile tools/export_onnx.py tools/validate_bundle.py
+          python -m py_compile tools/export_onnx.py tools/build_bundle.py tools/export_fp32.py tools/validate_bundle.py
           python -c "import json; json.load(open('notebooks/export_badini_omnivoice.ipynb', encoding='utf-8'))"
       - name: Install dependencies
         run: npm install
