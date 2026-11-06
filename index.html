@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#10131c">
+  <meta name="description" content="Offline, browser-local Badini Kurdish text-to-speech.">
+  <title>Badini Voice · Local TTS</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div class="brand-mark">ب</div>
+      <div><p class="eyebrow">LOCAL TEXT TO SPEECH</p><h1>Badini Voice</h1></div>
+      <span class="local-pill"><i></i> DEVICE ONLY</span>
+    </header>
+    <section class="intro">
+      <p class="eyebrow">OMNIVOICE · BADINI KURDISH</p>
+      <h2>Your text.<br><span>Your device's voice.</span></h2>
+      <p class="sub">A browser-based TTS workspace designed to run locally, without an inference server or API.</p>
+    </section>
+    <section class="panel">
+      <div class="section-head"><div><p class="eyebrow">01 / TEXT</p><h3>What should it say?</h3></div><span class="counter" id="charCount">0 / 1200</span></div>
+      <textarea id="textInput" maxlength="1200" placeholder="دەقێ خۆ بنڤیسە...&#10;Write your Badini text here." dir="auto"></textarea>
+      <div class="controls">
+        <label class="field-label" for="voiceSelect">VOICE</label>
+        <select id="voiceSelect"><option value="hayfa">Hayfa</option><option value="abdullah">Abdullah</option><option value="bafreen">Bafreen</option></select>
+        <label class="field-label" for="emotionSelect">REFERENCE STYLE</label>
+        <select id="emotionSelect"><option value="natural">Natural (Hayfa only)</option><option value="happy">Happy</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="fear">Fear</option><option value="surprise">Surprise</option></select>
+      </div>
+      <button id="generateBtn" class="primary" disabled>Generate speech <span>↗</span></button>
+      <p class="hint" id="generationStatus">The browser inference engine is not installed yet. Load the exported ONNX model bundle below.</p>
+    </section>
+    <section class="panel model-panel">
+      <div class="section-head"><div><p class="eyebrow">02 / MODEL</p><h3>Local model files</h3></div><span class="status" id="modelStatus">NOT LOADED</span></div>
+      <p class="sub small">Choose the ONNX export files from your device. Files are kept in this browser's local storage. Nothing is uploaded.</p>
+      <label class="file-drop" for="modelFiles"><span class="upload-icon">＋</span><strong>Select model files</strong><span>ONNX, JSON and tokenizer files</span><input id="modelFiles" type="file" multiple></label>
+      <ul id="fileList" class="file-list"><li class="empty">No model files selected.</li></ul>
+      <div class="model-note"><strong>Expected export:</strong> OmniVoice backbone (embeddings encoder, LLM decoder, audio heads) plus the Higgs Audio V2 decoder and tokenizer assets.</div>
+      <button id="clearBtn" class="secondary" type="button">Clear locally stored model files</button>
+    </section>
+    <section class="output panel">
+      <div class="section-head"><div><p class="eyebrow">03 / OUTPUT</p><h3>Generated audio</h3></div><span class="status" id="audioStatus">WAITING</span></div>
+      <audio id="audioPlayer" controls hidden></audio>
+      <a id="downloadLink" class="download" hidden download="badini-voice.wav">Download WAV ↗</a>
+      <p class="hint">Audio output will appear here when the model export and browser inference adapter are connected.</p>
+    </section>
+    <footer><span>BADINI VOICE</span><span>NO BACKEND · NO TELEMETRY · LOCAL STORAGE</span></footer>
+  </main>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
