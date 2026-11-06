@@ -140,11 +140,15 @@ def torch_export(module: nn.Module, inputs: tuple[torch.Tensor, ...], path: Path
     # PyTorch 2.9+ deprecates the legacy TorchScript exporter.  The current
     # torch.export-based exporter uses dynamic_shapes for model inputs; output
     # symbolic dimensions are inferred from the exported graph.
-    dynamic_shapes = {
-        name: dynamic_axes[name]
-        for name in input_names
-        if name in dynamic_axes
-    }
+    dim_cache = {}
+    dynamic_shapes = {}
+    for input_name in input_names:
+        axes = dynamic_axes.get(input_name, {})
+        if axes:
+            dynamic_shapes[input_name] = {
+                int(axis): dim_cache.setdefault(dim_name, torch.export.Dim(dim_name, min=1))
+                for axis, dim_name in axes.items()
+            }
     onnx_program = torch.onnx.export(
         module,
         inputs,
