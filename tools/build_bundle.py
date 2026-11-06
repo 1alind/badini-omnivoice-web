@@ -86,9 +86,13 @@ def main():
     voice_revision = model_info(a.model_id).sha
     higgs_revision = model_info(a.higgs_repo).sha
     reference_revision = model_info(a.reference_repo).sha
-    source=Path(snapshot_download(repo_id=a.model_id,revision=voice_revision,allow_patterns=["model.safetensors","config.json","tokenizer.json","tokenizer_config.json","chat_template.jinja"],local_dir=work/"fine-tuned-source"))
-    higgs_root=Path(snapshot_download(repo_id=a.higgs_repo,revision=higgs_revision,allow_patterns=["audio_tokenizer/**"],local_dir=work/"higgs-source"))
+    source=Path(snapshot_download(repo_id=a.model_id,revision=voice_revision,allow_patterns=["model.safetensors","config.json","tokenizer.json","tokenizer_config.json","chat_template.jinja","README.md"],local_dir=work/"fine-tuned-source"))
+    higgs_root=Path(snapshot_download(repo_id=a.higgs_repo,revision=higgs_revision,allow_patterns=["README.md","LICENSE","audio_tokenizer/**"],local_dir=work/"higgs-source"))
     higgs=higgs_root/"audio_tokenizer"
+    if (source/"README.md").is_file():
+        shutil.copy2(source/"README.md",out/"BADINI_MODEL_CARD.md")
+    if (higgs_root/"README.md").is_file():
+        shutil.copy2(higgs_root/"README.md",out/"OMNIVOICE_MODEL_CARD.md")
     print("Exporting the exact fine-tuned Badini checkpoint…")
     save_backbone(source,work,out)
     print("Exporting Higgs decoder…")
