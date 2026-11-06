@@ -1,5 +1,6 @@
 import { OmniVoiceEngine } from "./omnivoice-engine-v2.js";
 import { encodeWAV } from "./audio.js";
+import { estimateDuration } from "./duration.js";
 
 const $ = id => document.getElementById(id);
 const DB_NAME = "badini-voice-local";
@@ -99,6 +100,67 @@ function refreshEmotionOptions() {
   const active = [...select.options].find(option => !option.disabled);
   if (select.selectedOptions[0]?.disabled && active) select.value = active.value;
 }
+
+function splitLongWord(word, referenceText, referenceFrames, maxFrames) {
+  const parts = [];
+  let current = "";
+  for (const character of [...word]) {
+    const candidate = current + character;
+    if (current && estimateDuration(candidate, referenceText, referenceFrames) > maxFrames) {
+      parts.push(current);
+      current = character;
+    } else current = candidate;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function splitTextIntoChunks(text, referenceText, referenceFrames, maxFrames) {
+  const sentences = text.match(/[^.!?؟۔…]+[.!?؟۔…]?/gu) || [text];
+  const chunks = [];
+  let current = "";
+  const appendWords = sentence => {
+    for (const word of sentence.trim().split(/\\s+/u).filter(Boolean)) {
+      const pieces = estimateDuration(word, referenceText, referenceFrames) > maxFrames
+        ? splitLongWord(word, referenceText, referenceFrames, maxFrames)
+        : [word];
+      for (const piece of pieces) {
+        const candidate = current ? current + " " + piece : piece;
+        if (current && estimateDuration(candidate, referenceText, referenceFrames) > maxFrames) {
+          chunks.push(current);
+          current = piece;
+        } else current = candidate;
+      }
+    }
+  };
+  for (const sentence of sentences) {
+    const value = sentence.trim();
+    if (!value) continue;
+    const candidate = current ? current + " " + value : value;
+    if (estimateDuration(candidate, referenceText, referenceFrames) <= maxFrames) {
+      current = candidate;
+    } else {
+      if (current) { chunks.push(current); current = ""; }
+      appendWords(value);
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.length ? chunks : [text.trim()];
+}
+
+function joinPcm(chunks, sampleRate, pauseSeconds = 0.18) {
+  const pause = Math.round(sampleRate * pauseSeconds);
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0) + pause * Math.max(0, chunks.length - 1);
+  const output = new Float32Array(total);
+  let offset = 0;
+  chunks.forEach((chunk, index) => {
+    output.set(chunk, offset);
+    offset += chunk.length;
+    if (index < chunks.length - 1) offset += pause;
+  });
+  return output;
+}
+
 async function applySelectedPrompt() {
   const prompt = selectedPrompt();
   if (!prompt) {
@@ -239,21 +301,39 @@ $("generateBtn").addEventListener("click", async () => {
     const referenceText = (await loadedFiles.get(prompt.text).text()).trim();
     if (!referenceText) throw new Error("The selected voice prompt has no transcript.");
     const started = performance.now();
-    const result = await engine.synthesize(text, {
-      refAudioTokens,
-      refText: referenceText,
-      refRms: prompt.rms,
-      language: $("languageSelect").value,
-      numStep: Number($("stepsSelect").value),
-      onStep(progress) {
-        if (progress.step) {
-          $("progressBar").value = progress.step;
-          $("progressText").textContent = "Generating audio · step " + progress.step + " / " + progress.numStep;
+    const steps = Number($("stepsSelect").value);
+    const maxTargetTokens = Math.min(320, Number(loadedManifest.runtime.generation.maxTargetTokens || 360));
+    const chunks = splitTextIntoChunks(text, referenceText, prompt.frames, maxTargetTokens);
+    const pcmChunks = [];
+    let sampleRate = loadedManifest.runtime.sampleRate || 24000;
+    let backend = engine.backend;
+    $("progressBar").max = steps * chunks.length;
+    for (let index = 0; index < chunks.length; index += 1) {
+      $("generationStatus").textContent = chunks.length > 1
+        ? `Generating text chunk ${index + 1} of ${chunks.length}…`
+        : "Generating speech…";
+      const result = await engine.synthesize(chunks[index], {
+        refAudioTokens,
+        refText: referenceText,
+        refRms: prompt.rms,
+        language: $("languageSelect").value,
+        numStep: steps,
+        maxTargetTokens,
+        onStep(progress) {
+          if (progress.step) {
+            $("progressBar").value = index * steps + progress.step;
+            $("progressText").textContent = chunks.length > 1
+              ? `Chunk ${index + 1}/${chunks.length} · step ${progress.step}/${progress.numStep}`
+              : "Generating audio · step " + progress.step + " / " + progress.numStep;
+          }
         }
-      }
-    });
-    const samples = result.pcm;
-    const wav = encodeWAV(samples, result.sampleRate);
+      });
+      pcmChunks.push(result.pcm);
+      sampleRate = result.sampleRate;
+      backend = result.backend;
+    }
+    const samples = joinPcm(pcmChunks, sampleRate);
+    const wav = encodeWAV(samples, sampleRate);
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     outputUrl = URL.createObjectURL(wav);
     $("audioPlayer").src = outputUrl;
@@ -261,9 +341,9 @@ $("generateBtn").addEventListener("click", async () => {
     $("downloadLink").href = outputUrl;
     $("downloadLink").hidden = false;
     $("audioStatus").textContent = "READY";
-    const seconds = (samples.length / 24000).toFixed(1);
+    const seconds = (samples.length / sampleRate).toFixed(1);
     const elapsed = ((performance.now() - started) / 1000).toFixed(1);
-    $("generationStatus").textContent = `Generated ${seconds}s of audio in ${elapsed}s on this device (${result.backend.toUpperCase()}).`;
+    $("generationStatus").textContent = `Generated ${seconds}s of audio in ${elapsed}s on this device (${backend.toUpperCase()}) across ${chunks.length} chunk(s).`;
   } catch (error) {
     $("audioStatus").textContent = "ERROR";
     $("generationStatus").textContent = error.message;
