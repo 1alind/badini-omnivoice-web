@@ -8,6 +8,7 @@ const STORE = "model-files";
 const REQUIRED = ["manifest.json", "audio_embeddings_encoder.onnx", "llm_decoder.onnx", "audio_heads_decoder.onnx", "higgs_decoder.onnx", "tokenizer.json", "tokenizer_config.json"];
 
 let engine = null;
+let activeOperation = null;
 let outputUrl = null;
 let loadedManifest = null;
 let loadedFiles = new Map();
@@ -137,6 +138,11 @@ $("modelFiles").addEventListener("change", async event => {
   const selected = [...event.target.files];
   event.target.value = "";
   if (!selected.length) return;
+  if (activeOperation) {
+    $("generationStatus").textContent = "Wait for the current model operation to finish, then import again.";
+    return;
+  }
+  activeOperation = "import";
   await engine?.dispose();
   engine = null;
   loadedManifest = null;
@@ -157,9 +163,12 @@ $("modelFiles").addEventListener("change", async event => {
   }
   renderFiles(await readFiles());
   event.target.value = "";
+  activeOperation = null;
 });
 
 $("loadBtn").addEventListener("click", async () => {
+  if (activeOperation) return;
+  activeOperation = "load";
   $("loadBtn").disabled = true;
   $("modelStatus").textContent = "LOADING";
   $("engineStatus").textContent = "LOADING";
@@ -211,10 +220,13 @@ $("loadBtn").addEventListener("click", async () => {
     if (engine) $("modelStatus").textContent = "LOADED";
     $("loadBtn").disabled = false;
     $("generateBtn").disabled = !engine || !$("textInput").value.trim();
+    activeOperation = null;
   }
 });
 
 $("clearBtn").addEventListener("click", async () => {
+  if (activeOperation) return;
+  activeOperation = "clear";
   await engine?.dispose();
   engine = null;
   loadedManifest = null;
@@ -228,6 +240,7 @@ $("clearBtn").addEventListener("click", async () => {
   if (outputUrl) URL.revokeObjectURL(outputUrl);
   $("audioPlayer").hidden = true;
   $("downloadLink").hidden = true;
+  activeOperation = null;
 });
 
 
@@ -238,9 +251,10 @@ $("voiceSelect").addEventListener("change", async () => {
 $("emotionSelect").addEventListener("change", applySelectedPrompt);
 
 $("generateBtn").addEventListener("click", async () => {
-  if (!engine) return;
+  if (!engine || activeOperation) return;
   const text = $("textInput").value.trim();
   if (!text) return;
+  activeOperation = "generate";
   $("generateBtn").disabled = true;
   $("progressWrap").hidden = false;
   $("progressBar").value = 0;
@@ -310,6 +324,7 @@ $("generateBtn").addEventListener("click", async () => {
   } finally {
     $("progressWrap").hidden = true;
     $("generateBtn").disabled = !engine || !$("textInput").value.trim();
+    activeOperation = null;
   }
 });
 
