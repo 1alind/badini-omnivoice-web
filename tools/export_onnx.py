@@ -74,6 +74,7 @@ class AudioDecoderWrapper(torch.nn.Module):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", default="Dezheen89/omnivoice-badini")
+    parser.add_argument("--reference_repo", default="Dezheen89/cosyvoice")
     parser.add_argument("--output_dir", default="./badini-model-bundle")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cuda")
     parser.add_argument("--dtype", choices=["fp16", "fp32"], default="fp16")
@@ -140,14 +141,40 @@ def main():
         )
 
     model.text_tokenizer.save_pretrained(out)
-    try:
-        prompt_wav = hf_hub_download(args.model_path, "prompt-hayfa.wav")
-        prompt_txt = hf_hub_download(args.model_path, "prompt-hayfa.txt")
-        shutil.copy2(prompt_wav, out / "prompt-hayfa.wav")
-        shutil.copy2(prompt_txt, out / "prompt-hayfa.txt")
-    except Exception as exc:
-        print(f"WARNING: default Hayfa prompt was not copied: {exc}")
-        print("Add a 24 kHz reference WAV and its exact transcript before generating.")
+    prompt_specs = [
+        ("hayfa", "natural", "prompt-hayfa"),
+        ("hayfa", "angry", "prompt-angry"),
+        ("hayfa", "sad", "prompt-sad"),
+        ("hayfa", "happy", "prompt-happy"),
+        ("hayfa", "fear", "prompt-fear"),
+        ("hayfa", "surprise", "prompt-surprise"),
+        ("abdullah", "angry", "prompt-abdullah-angry"),
+        ("abdullah", "sad", "prompt-abdullah-sad"),
+        ("abdullah", "happy", "prompt-abdullah-happy"),
+        ("abdullah", "fear", "prompt-abdullah-fear"),
+        ("abdullah", "surprise", "prompt-abdullah-surprise"),
+        ("bafreen", "angry", "prompt-bafreen-angry"),
+        ("bafreen", "sad", "prompt-bafreen-sad"),
+        ("bafreen", "happy", "prompt-bafreen-happy"),
+        ("bafreen", "fear", "prompt-bafreen-fear"),
+        ("bafreen", "surprise", "prompt-bafreen-surprise"),
+    ]
+    reference_prompts = []
+    for voice, emotion, stem in prompt_specs:
+        try:
+            wav_path = hf_hub_download(args.reference_repo, stem + ".wav")
+            txt_path = hf_hub_download(args.reference_repo, stem + ".txt")
+            shutil.copy2(wav_path, out / (stem + ".wav"))
+            shutil.copy2(txt_path, out / (stem + ".txt"))
+            reference_prompts.append({
+                "voice": voice, "emotion": emotion,
+                "audio": stem + ".wav", "text": stem + ".txt"
+            })
+        except Exception as exc:
+            print(f"WARNING: prompt {stem} was not copied: {exc}")
+
+    if not reference_prompts:
+        print("WARNING: No reference prompts were copied. Import your own reference WAV and exact transcript.")
 
     external_data = {}
     for graph_name in ("omnivoice_lm.onnx", "audio_encoder.onnx", "audio_decoder.onnx"):
@@ -159,6 +186,7 @@ def main():
         "sample_rate": 24000,
         "num_audio_codebooks": codebooks,
         "external_data": external_data,
+        "reference_prompts": reference_prompts,
         "precision": args.dtype if device.startswith("cuda") else "fp32",
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
