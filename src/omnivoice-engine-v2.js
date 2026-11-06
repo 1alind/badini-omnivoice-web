@@ -81,20 +81,20 @@ export class OmniVoiceEngine {
     ort.env.wasm.wasmPaths = new URL("./vendor/ort/", document.baseURI).href;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1)) : 1;
     this.tokenizer = new Tokenizer(JSON.parse(await this.#readText("tokenizer.json")), JSON.parse(await this.#readText("tokenizer_config.json")));
-    const providers = navigator.gpu && this.runtime.preferWebGpu !== false ? ["webgpu", "wasm"] : ["wasm"];
+    const plans = buildSessionPlans(manifest, Boolean(navigator.gpu && this.runtime.preferWebGpu !== false));
     let lastError;
-    for (const provider of providers) {
+    for (const plan of plans) {
       try {
-        onStatus(`Loading split OmniVoice models using ${provider.toUpperCase()}…`);
-        this.sessions = await this.#createSessions(provider, onStatus);
-        this.backend = provider;
+        onStatus(`Loading split OmniVoice models using ${plan.label.toUpperCase()}…`);
+        this.sessions = await this.#createSessions(plan, onStatus);
+        this.backend = plan.label;
         await this.#warmup();
         onStatus("Model loaded on this device.");
-        return { backend: provider, sampleRate: this.runtime.sampleRate };
+        return { backend: plan.label, sampleRate: this.runtime.sampleRate };
       } catch (error) {
         lastError = error;
         await this.#releaseSessions();
-        if (provider === "webgpu") onStatus("WebGPU failed. Retrying with local WASM CPU…");
+        if (plan.defaultBackend === "webgpu") onStatus("WebGPU path failed. Retrying with local WASM CPU…");
       }
     }
     throw new Error(`OmniVoice initialization failed: ${lastError?.message || "no usable backend"}`);
@@ -129,10 +129,11 @@ export class OmniVoiceEngine {
     const pcm = await this.#decode(generated.tokens, generated.codebooks, generated.targetLength);
     return { pcm: normalizePcm(pcm, options.refRms ?? null), sampleRate: this.runtime.sampleRate || 24000, backend: this.backend, targetLength: generated.targetLength };
   }
-  async #createSessions(provider, onStatus) {
+  async #createSessions(plan, onStatus) {
     const sessions = {};
     try {
       for (const [name, definition] of Object.entries(this.runtime.sessions)) {
+        const provider = plan.backends[name] || plan.defaultBackend;
         const options = { executionProviders: [provider], graphOptimizationLevel: "all" };
         if (definition.externalData?.length) {
           options.externalData = [];
@@ -174,6 +175,12 @@ export class OmniVoiceEngine {
     if (logits.length !== 2 * codebooks * sequenceLength * this.runtime.generation.audio_vocab_size) {
       throw new Error(`Unexpected warmup logits length: ${logits.length}`);
     }
+    const decoderInput = new this.ort.Tensor("int64", new BigInt64Array(codebooks * 8), [codebooks, 1, 8]);
+    const decoderResult = await this.sessions.higgsDecoder.run({ codes: decoderInput });
+    decoderInput.dispose?.();
+    const decoded = decoderResult.waveform_24k;
+    if (!decoded || !decoded.data?.length) throw new Error("Higgs decoder warmup returned no waveform.");
+    decoded.dispose?.();
   }
 
   async #runBackboneStep({ inputIds, audioMask, attentionMask, attentionMaskType = "bool", attentionMaskShape, batch, codebooks, sequenceLength }) {
@@ -249,21 +256,3 @@ function buildSessionPlans(manifest, webGpuAvailable) {
   ];
 }
 
-async function loadTokenizer(assetRoot, tokenizerDirectory) {
-  const base = new URL(`${tokenizerDirectory.replace(/\/$/, "")}/`, assetRoot);
-  const [tokenizerResponse, configResponse] = await Promise.all([
-    fetch(new URL("tokenizer.json", base)),
-    fetch(new URL("tokenizer_config.json", base)),
-  ]);
-  if (!tokenizerResponse.ok) {
-    throw new Error(`Tokenizer model is unavailable offline: ${tokenizerResponse.status}`);
-  }
-  if (!configResponse.ok) {
-    throw new Error(`Tokenizer config is unavailable offline: ${configResponse.status}`);
-  }
-  const [tokenizerJson, tokenizerConfig] = await Promise.all([
-    tokenizerResponse.json(),
-    configResponse.json(),
-  ]);
-  return new Tokenizer(tokenizerJson, tokenizerConfig);
-}
