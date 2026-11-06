@@ -69,7 +69,7 @@ function tokenHash(tokens) {
 export class OmniVoiceEngine {
   constructor() {
     this.manifest = null; this.tokenizer = null; this.sessions = null;
-    this.backend = null; this.runtime = null; this.ort = ort; this.files = null;
+    this.backend = null; this.runtime = null; this.ort = ort; this.files = null; this.urls = new Map();
   }
 
   async load(files, onStatus = () => {}) {
@@ -104,10 +104,11 @@ export class OmniVoiceEngine {
     if (!blob) throw new Error(`Missing required model file: ${name}`);
     return blob.text();
   }
-  async #readBytes(name) {
+  #fileUrl(name) {
     const blob = this.files.get(name);
     if (!blob) throw new Error(`Missing required model file: ${name}`);
-    return new Uint8Array(await blob.arrayBuffer());
+    if (!this.urls.has(name)) this.urls.set(name, URL.createObjectURL(blob));
+    return this.urls.get(name);
   }
   async synthesize(text, options = {}) {
     if (!this.sessions || !this.tokenizer) throw new Error("Load the model files first.");
@@ -135,9 +136,9 @@ export class OmniVoiceEngine {
         const options = { executionProviders: [provider], graphOptimizationLevel: "all" };
         if (definition.externalData?.length) {
           options.externalData = [];
-          for (const entry of definition.externalData) options.externalData.push({ path: entry.path, data: await this.#readBytes(entry.localPath) });
+          for (const entry of definition.externalData) options.externalData.push({ path: entry.path, data: this.#fileUrl(entry.localPath) });
         }
-        sessions[name] = await ort.InferenceSession.create(await this.#readBytes(definition.model), options);
+        sessions[name] = await ort.InferenceSession.create(this.#fileUrl(definition.model), options);
         onStatus(`Loaded ${name} (${provider.toUpperCase()})`);
       }
       return sessions;
@@ -212,6 +213,8 @@ export class OmniVoiceEngine {
 
   async dispose() {
     await this.#releaseSessions();
+    for (const url of this.urls.values()) URL.revokeObjectURL(url);
+    this.urls.clear();
     this.backend = null; this.tokenizer = null; this.files = null;
   }
 }
