@@ -1,7 +1,7 @@
 # Vendored browser runtime
 
-To keep runtime network requests at **zero**, vendor a pinned, locally built copy of ONNX Runtime Web here and reference it with a relative path.
+The build script copies the pinned ONNX Runtime Web WASM and JavaScript runtime assets from `node_modules/onnxruntime-web/dist` into `public/vendor/ort/`.
 
-Do not import ONNX Runtime from a CDN in the final offline build. Confirm the package license and include its license notices.
+Run `npm install` and `npm run build` to generate these local assets in `dist/vendor/ort/`. The app points ONNX Runtime at this same-origin directory. Do not replace it with a CDN URL.
 
-The runtime is intentionally not bundled in this starter because its WebGPU/WebAssembly build and operator support must be validated against the exported OmniVoice graphs first.
+The generated runtime files are build artifacts and are intentionally ignored by Git. The dependency version is pinned in `package.json`.
