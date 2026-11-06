@@ -1,13 +1,13 @@
 # Adapted from DaisukeDaisuke/tsukuyomichan-omnivoice-onnx/scripts/quantize_mobile_int8.py
 # Source license: MIT; see NOTICE.
 #!/usr/bin/env python3
-"""Convert only the already-correct OmniVoice LLM ONNX weights to MatMulNBits.
+"""Dynamically quantize the OmniVoice LLM to Safari/WASM-compatible INT8.
 
 The FP32 exporter remains the single source of truth for graph structure and
-OmniVoice's non-causal rank-4 Boolean attention contract. This script runs
-after that export and replaces constant MatMul weights in llm_decoder.onnx
-with block-wise 4-bit or 8-bit MatMulNBits weights. Audio embeddings, audio heads and
-the Higgs decoder are deliberately left unchanged.
+OmniVoice's non-causal rank-4 Boolean attention contract. This script replaces
+eligible constant-weight MatMul nodes with standard ONNX DynamicQuantizeLinear
+and MatMulInteger nodes. Audio embeddings, audio heads and the Higgs decoder
+are deliberately left unchanged.
 """
 from __future__ import annotations
 
