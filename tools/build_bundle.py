@@ -91,6 +91,8 @@ def main():
     save_backbone(source,work,out)
     print("Exporting Higgs decoder…")
     save_higgs(higgs,work,out)
+    if (higgs / "LICENSE").is_file():
+        shutil.copy2(higgs / "LICENSE", out / "HIGGS_AUDIO_LICENSE.txt")
     codec=HiggsAudioV2TokenizerModel.from_pretrained(str(higgs),dtype=torch.float32)
     codec.eval()
     prompts,sample_rate,hop=encode_prompts(codec,a.reference_repo,reference_revision,out)
