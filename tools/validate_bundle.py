@@ -102,6 +102,8 @@ def main():
         raise SystemExit("ERROR: manifest does not declare OmniVoice non-causal attention")
     quantization = manifest.get("quantization")
     if quantization and quantization.get("bits") == 8:
+        if runtime.get("qualityProfile") != "mobile-int8-dynamic-wasm":
+            raise SystemExit("ERROR: manifest must declare the mobile-int8-dynamic-wasm runtime profile")
         llm = onnx.load(str(root / "llm_decoder.onnx"), load_external_data=False)
         matmul_integer = sum(
             1 for node in llm.graph.node
