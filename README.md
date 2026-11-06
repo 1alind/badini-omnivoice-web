@@ -1,6 +1,6 @@
 # Badini Voice · Browser-local OmniVoice
 
-A static, offline-first web app for generating Badini Kurdish speech using the fine-tuned OmniVoice model.
+A static, offline-first web app for generating Badini Kurdish speech using the [Dezheen89/omnivoice-badini](https://huggingface.co/Dezheen89/omnivoice-badini) fine-tune. Voice prompt samples come from [Dezheen89/cosyvoice](https://huggingface.co/Dezheen89/cosyvoice).
 
 ## What it does
 
