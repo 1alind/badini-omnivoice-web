@@ -181,13 +181,14 @@ export class OmniVoiceEngine {
     try {
       for (const [name, definition] of Object.entries(this.runtime.sessions)) {
         const provider = plan.backends[name] || plan.defaultBackend;
-        const options = { executionProviders: [provider], graphOptimizationLevel: "all" };
+        const sessionProvider = definition.executionProvider || provider;
+        const options = { executionProviders: [sessionProvider], graphOptimizationLevel: "all" };
         if (definition.externalData?.length) {
           options.externalData = [];
           for (const entry of definition.externalData) options.externalData.push({ path: entry.path, data: this.#fileUrl(entry.localPath) });
         }
         sessions[name] = await ort.InferenceSession.create(this.#fileUrl(definition.model), options);
-        onStatus(`Loaded ${name} (${provider.toUpperCase()})`);
+        onStatus(`Loaded ${name} (${sessionProvider.toUpperCase()})`);
       }
       return sessions;
     } catch (error) {
