@@ -1,10 +1,11 @@
 This project includes adapted browser inference and sampling code from:
 
-OmniVoice Web
-Source: https://github.com/AnEntrypoint/omnivoice
-License: Apache License 2.0
+- `RabbitDaisuke/typed-voice` (OmniVoice browser runtime): https://github.com/RabbitDaisuke/typed-voice
+- `AnEntrypoint/omnivoice` (upstream model implementation): https://github.com/AnEntrypoint/omnivoice
 
-The adapted browser inference engine and sampling utilities are distributed under the Apache License 2.0. See LICENSE-APACHE-2.0.
+These components are licensed under Apache License 2.0. See LICENSE-APACHE-2.0.
+
+The split ONNX export implementation is adapted from `DaisukeDaisuke/tsukuyomichan-omnivoice-onnx` (MIT): https://github.com/DaisukeDaisuke/tsukuyomichan-omnivoice-onnx. Its license is compatible with the project MIT license.
 
 The remaining original project files are provided under the MIT License in LICENSE.
 
