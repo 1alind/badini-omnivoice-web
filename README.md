@@ -47,7 +47,7 @@ The app stores the imported model files in IndexedDB. Safari storage limits vary
 
 ## Browser limitations
 
-- ONNX Runtime Web's current compatibility table lists WASM CPU for Safari on iOS, but not WebGPU. Therefore iPad Safari uses CPU/WASM. An M2 chip does not unlock WebGPU where the browser does not expose it.
+- ONNX Runtime Web's current compatibility table lists WASM CPU for Safari on iOS, but still marks its WebGPU execution provider unsupported there. Safari 26 itself has begun exposing the WebGPU API on iOS. The app probes for it and attempts WebGPU, then falls back to WASM if ONNX Runtime or a required operator is unsupported.
 - This model is about 0.6B parameters. FP16 export is the default to reduce file size, but memory use and generation speed still need real-device validation on the target iPad.
 - The current engine is an initial JavaScript port of OmniVoice's masked-token generation loop. It must be compared against the Python reference output before treating the generated voice as fully validated.
 - The first export notebook uses a cloud notebook only for conversion. It is not used for speech generation.
