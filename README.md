@@ -11,9 +11,9 @@ The app uses four split ONNX graphs:
 - `audio_heads_decoder.onnx`
 - `higgs_decoder.onnx`
 
-The one-time bundle builder exports the fine-tuned backbone in FP32, splits large external weight files into browser-importable parts, and pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files. Hayfa's natural sample comes from the fine-tune itself; the additional voice/emotion samples come from `Dezheen89/cosyvoice`. Safari does not need to upload or encode reference audio during generation.
+The one-time bundle builder exports the fine-tuned backbone into four split ONNX graphs, pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files, then converts only the LLM's constant MatMul weights to mobile INT8. Audio embeddings, audio heads and the Higgs decoder remain FP32. Hayfa's natural sample comes from the fine-tune itself; the additional voice/emotion samples come from `Dezheen89/cosyvoice`. Safari does not need to upload or encode reference audio during generation.
 
-The browser runtime uses ONNX Runtime Web. It attempts WebGPU for the backbone graphs when available, runs the Higgs decoder through WASM, and falls back to all-WASM if the mixed path cannot initialize. Long text is split into shorter generation chunks to keep the per-run token budget bounded on iPad.
+The browser runtime uses ONNX Runtime Web. In the mobile INT8 profile, the LLM and Higgs decoder run through WASM, while audio embeddings and audio heads can use WebGPU when available. If the mixed path cannot initialize, all graphs fall back to WASM. Long text is split into shorter generation chunks to keep the per-run token budget bounded on iPad.
 
 ## No inference server
 
@@ -29,12 +29,12 @@ A hosted static page still needs an initial connection to download the app. The 
 The model checkpoint is large. Use a Google Colab **High-RAM** runtime if available. The exporter uses CPU PyTorch and may take a while.
 
 1. Open the [Colab export notebook](https://colab.research.google.com/github/1alind/badini-omnivoice-web/blob/main/notebooks/export_badini_omnivoice.ipynb).
-2. Run the notebook cells. It downloads the exact fine-tuned checkpoint, exports and validates the four ONNX graphs, and pre-encodes the reference prompts.
+2. Run the notebook cells. It downloads the exact fine-tuned checkpoint, exports the four ONNX graphs, pre-encodes the reference prompts, converts the LLM to INT8, and validates the quantized bundle against the FP32 reference.
 3. Download `badini-omnivoice-model.zip` when the notebook finishes.
 4. Extract the ZIP in the iPad Files app.
 5. Open the [Badini Voice app](https://1alind.github.io/badini-omnivoice-web/) after GitHub Pages is enabled, select all extracted files, and import them.
 
-The ZIP can be several gigabytes. Do not commit model weights or generated prompt-token files to this GitHub repository.
+The notebook prints the actual ZIP size before downloading. Do not commit model weights or generated prompt-token files to this GitHub repository.
 
 ## Run locally
 
@@ -62,11 +62,11 @@ The target is Safari on the M2 iPad Pro. WebGPU support in iOS Safari and ONNX R
 ## Licensing
 
 - Original project files: MIT, see `LICENSE`.
-- Adapted legacy OmniVoice Web components: Apache-2.0, see `LICENSE-APACHE-2.0`.
+- Adapted OmniVoice browser runtime components: Apache-2.0, see `LICENSE-APACHE-2.0` and `NOTICE`.
 - Adapted FP32 exporter: MIT, see `LICENSE-TSUKUYOMICHAN-MIT`.
 - Bundled ONNX Runtime Web and Hugging Face Tokenizers: see `THIRD_PARTY_NOTICES.md`.
 - Model weights and Higgs Audio V2 tokenizer assets have separate upstream license terms. Review them before redistributing a model bundle.
 
 ## Current status
 
-The static app, split-graph browser runtime, bundle exporter, validator, chunking, and CI checks are in the repository. The project is **not end-to-end verified yet**: the model bundle still needs to be generated in Colab and tested on the iPad.
+The static app, split-graph browser runtime, FP32 exporter, mobile INT8 quantizer, validator, speaker prompt encoder, chunking and CI checks are in the repository. The project is **not end-to-end verified yet**: the model bundle still needs to be generated in Colab and tested on the iPad.
