@@ -95,7 +95,7 @@ def main():
     print(f"Loading fine-tuned checkpoint: {args.model_path} on {device} ({dtype})")
     model = OmniVoice.from_pretrained(
         args.model_path,
-        torch_dtype=dtype,
+        dtype=dtype,
         attn_implementation="eager",
         device_map=device,
     )
