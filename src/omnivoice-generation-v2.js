@@ -187,7 +187,7 @@ function unmaskBest({ scores, predictions, tokens, maskId, count, positionTemper
 }
 
 export async function prepareOmniVoiceInputs(text, tokenizer, config, options = {}) {
-  const normalizedText = text.trim().replace(/[\r\n]+/g, " ").replace(/[ \t]+/g, " ");
+  const normalizedText = text.trim().replace(/[ \t]*\r?\n[\s]*/g, ".").replace(/[ \t]+/g, " ");
   if (!normalizedText) throw new Error("Synthesis text is empty");
   const codebooks = config.num_audio_codebook;
   const refAudioTokens = options.refAudioTokens || null;
