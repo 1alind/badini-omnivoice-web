@@ -24,22 +24,36 @@ function normalizePcm(input, refRms = null) {
   const sampleRate = 24000;
   const windowSize = 240;
   const threshold = Math.pow(10, -50 / 20);
-  const windows = Math.ceil(pcm.length / windowSize);
-  const active = new Uint8Array(windows);
-  for (let w = 0; w < windows; w += 1) {
-    const start = w * windowSize;
-    const end = Math.min(pcm.length, start + windowSize);
-    let energy = 0;
-    for (let i = start; i < end; i += 1) energy += pcm[i] * pcm[i];
-    active[w] = Math.sqrt(energy / Math.max(1, end - start)) > threshold ? 1 : 0;
+  const makeActivity = samples => {
+    const count = Math.ceil(samples.length / windowSize);
+    const active = new Uint8Array(count);
+    for (let w = 0; w < count; w += 1) {
+      const start = w * windowSize;
+      const end = Math.min(samples.length, start + windowSize);
+      let energy = 0;
+      for (let i = start; i < end; i += 1) energy += samples[i] * samples[i];
+      active[w] = Math.sqrt(energy / Math.max(1, end - start)) > threshold ? 1 : 0;
+    }
+    return active;
+  };
+  let activity = makeActivity(pcm);
+  let first = -1, last = -1;
+  for (let i = 0; i < activity.length; i += 1) if (activity[i]) { if (first < 0) first = i; last = i; }
+  if (first >= 0) {
+    const lead = first * windowSize;
+    const trail = pcm.length - (last + 1) * windowSize;
+    const left = lead > 2400 ? lead - 2400 : 0;
+    const right = trail > 2400 ? Math.min(pcm.length, (last + 1) * windowSize + 2400) : pcm.length;
+    pcm = pcm.slice(left, right);
   }
+  activity = makeActivity(pcm);
   const pieces = [];
   let cursor = 0;
   let w = 0;
-  while (w < windows) {
-    if (active[w]) { w += 1; continue; }
+  while (w < activity.length) {
+    if (activity[w]) { w += 1; continue; }
     const silentStart = w;
-    while (w < windows && !active[w]) w += 1;
+    while (w < activity.length && !activity[w]) w += 1;
     const silentEnd = w;
     if (silentEnd - silentStart > 50) {
       const cutStart = Math.min(pcm.length, (silentStart + 25) * windowSize);
@@ -55,15 +69,6 @@ function normalizePcm(input, refRms = null) {
     let offset = 0;
     for (const piece of pieces) { joined.set(piece, offset); offset += piece.length; }
     pcm = joined;
-  }
-  let first = -1, last = -1;
-  for (let i = 0; i < active.length; i += 1) if (active[i]) { if (first < 0) first = i; last = i; }
-  if (first >= 0) {
-    const lead = first * windowSize;
-    const trail = pcm.length - (last + 1) * windowSize;
-    const left = lead > 2400 ? lead - 2400 : 0;
-    const right = trail > 2400 ? Math.min(pcm.length, (last + 1) * windowSize + 2400) : pcm.length;
-    pcm = pcm.slice(left, right);
   }
   if (refRms !== null && refRms < 0.1) {
     const scale = refRms / 0.1;
