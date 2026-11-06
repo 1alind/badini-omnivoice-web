@@ -123,7 +123,7 @@ def main():
       }
     }
     (out/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
-    (out/"BUNDLE_README.txt").write_text("Badini OmniVoice local browser bundle.\nSelect all files in this folder in Badini Voice.\nSpeech generation runs on this device; no inference server or API is used.\nOutput is mono 24 kHz.\n",encoding="utf-8")
+    (out/"BUNDLE_README.txt").write_text("Badini OmniVoice local browser bundle.\nSelect all files in this folder in Badini Voice.\nSpeech generation runs on this device; no inference server or API is used.\nOutput is mono 24 kHz.\nDo not redistribute unless every upstream model and codec license permits it. Review BADINI_MODEL_CARD.md, OMNIVOICE_MODEL_CARD.md and HIGGS_AUDIO_LICENSE.txt.\n",encoding="utf-8")
     print(f"Bundle ready: {out} · {len(prompts)} voice prompts. Run tools/validate_bundle.py next.")
 
 if __name__=="__main__": main()
