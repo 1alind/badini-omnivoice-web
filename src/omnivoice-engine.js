@@ -8,6 +8,52 @@ const AUDIO_VOCAB = 1025;
 const MASK_ID = 1024;
 const SAMPLE_RATE = 24000;
 
+
+function addTerminalPunctuation(text) {
+  const value = (text || "").trim();
+  if (!value || /[.!?؟。！？]$/.test(value)) return value;
+  return value + ".";
+}
+function trimSilenceEdges(samples, leadMs, trailMs) {
+  if (!samples.length) return samples;
+  const windowSize = Math.max(1, Math.floor(SAMPLE_RATE * 0.01));
+  const threshold = Math.pow(10, -50 / 20);
+  const windows = Math.ceil(samples.length / windowSize);
+  let first = -1, last = -1;
+  for (let w = 0; w < windows; w++) {
+    const start = w * windowSize, end = Math.min(samples.length, start + windowSize);
+    let energy = 0;
+    for (let i = start; i < end; i++) energy += samples[i] * samples[i];
+    const rms = Math.sqrt(energy / Math.max(1, end - start));
+    if (rms > threshold) { if (first < 0) first = w; last = w; }
+  }
+  if (first < 0) return samples;
+  const start = Math.max(0, first * windowSize - Math.floor(leadMs * SAMPLE_RATE / 1000));
+  const end = Math.min(samples.length, (last + 1) * windowSize + Math.floor(trailMs * SAMPLE_RATE / 1000));
+  return samples.subarray(start, end);
+}
+function postProcessAudio(samples, refRms) {
+  let output = trimSilenceEdges(samples, 100, 100);
+  if (refRms !== null && refRms < 0.1) {
+    const scale = refRms / 0.1;
+    output = Float32Array.from(output, value => value * scale);
+  }
+  const fadeSamples = Math.floor(SAMPLE_RATE * 0.1);
+  const k = Math.min(fadeSamples, Math.floor(output.length / 2));
+  const faded = new Float32Array(output);
+  if (k > 0) {
+    for (let i = 0; i < k; i++) {
+      const factor = k === 1 ? 0 : i / (k - 1);
+      faded[i] *= factor;
+      faded[faded.length - 1 - i] *= 1 - factor;
+    }
+  }
+  const pad = Math.floor(SAMPLE_RATE * 0.1);
+  const padded = new Float32Array(faded.length + pad * 2);
+  padded.set(faded, pad);
+  return padded;
+}
+
 export class OmniVoiceEngine {
   constructor() {
     this.lm = null;
@@ -15,7 +61,7 @@ export class OmniVoiceEngine {
     this.decoder = null;
     this.tokenizer = null;
     this.backend = "wasm";
-    this.runtime = ort;
+    this.hopLength = 960;
   }
 
   async load(files, onProgress = () => {}) {
@@ -31,6 +77,7 @@ export class OmniVoiceEngine {
 
     this.backend = navigator.gpu ? "webgpu" : "wasm";
     const manifest = files.has("manifest.json") ? JSON.parse(await files.get("manifest.json").text()) : {};
+    this.hopLength = Number(manifest.audio_hop_length || 960);
     const sidecarsFor = async graph => {
       const names = manifest.external_data?.[graph] || [];
       const assets = [];
@@ -78,13 +125,26 @@ export class OmniVoiceEngine {
   }
 
   async encodeReference(waveform) {
-    const input = new ort.Tensor("float32", waveform, [1, 1, waveform.length]);
+    const original = new Float32Array(waveform);
+    let sum = 0;
+    for (const sample of original) sum += sample * sample;
+    const refRms = Math.sqrt(sum / Math.max(1, original.length));
+    let prepared = original;
+    if (refRms > 0 && refRms < 0.1) {
+      const scale = 0.1 / refRms;
+      prepared = Float32Array.from(original, value => value * scale);
+    }
+    prepared = trimSilenceEdges(prepared, 100, 200);
+    const usableLength = Math.floor(prepared.length / this.hopLength) * this.hopLength;
+    if (!usableLength) throw new Error("Reference audio is too short after trimming.");
+    prepared = prepared.subarray(0, usableLength);
+    const input = new ort.Tensor("float32", prepared, [1, 1, prepared.length]);
     const result = await this.encoder.run({ waveform: input });
     input.dispose();
     const codes = result.audio_codes;
     const output = { data: new Int32Array(codes.data), dims: Array.from(codes.dims) };
     codes.dispose?.();
-    return output;
+    return { codes: output, rms: refRms };
   }
 
   async decode(codes, dims) {
@@ -102,6 +162,8 @@ export class OmniVoiceEngine {
     const style = this._tokens(`${denoise}<|lang_start|>${language}<|lang_end|><|instruct_start|>None<|instruct_end|>`);
     let fullText = refText ? `${refText.trim()} ${text.trim()}` : text.trim();
     fullText = fullText.replace(/[ \t]*\r?\n[\s]*/g, ".");
+    fullText = fullText.replace(/(?<=[\u4e00-\u9fff])\s+|\s+(?=[\u4e00-\u9fff])/g, "");
+    fullText = fullText.replace(/\s+(\[(?:sigh|confirmation-en|question-en|question-ah|question-oh|question-ei|question-yi|surprise-ah|surprise-oh|surprise-wa|surprise-yo|dissatisfaction-hnn)\])/g, "$1");
     const textTokens = this._tokens(`<|text_start|>${fullText}<|text_end|>`);
     const refFrames = refCodes ? refCodes.dims[2] : 0;
     const seq = style.length + textTokens.length + refFrames + targetFrames;
@@ -131,10 +193,12 @@ export class OmniVoiceEngine {
   async generate(text, { refAudio, refText, language = "kmr", steps = 32, guidance = 2, positionTemperature = 5, onStep = () => {} } = {}) {
     if (!this.lm || !this.tokenizer) throw new Error("Load the model files first.");
     if (!text.trim()) throw new Error("Enter some Badini text.");
-    const refCodes = refAudio ? await this.encodeReference(refAudio) : null;
+    const reference = refAudio ? await this.encodeReference(refAudio) : null;
+    const refCodes = reference?.codes || null;
+    const cleanRefText = addTerminalPunctuation(refText || "");
     const refFrames = refCodes?.dims?.[2] || 25;
-    const targetFrames = Math.max(1, estimateDuration(text, refText || "سلاڤ", refFrames));
-    const { ids, audioMask, seq, targetStart } = this._buildInput(text, targetFrames, refText, refCodes, language);
+    const targetFrames = estimateDuration(text, cleanRefText || "Nice to meet you.", refFrames);
+    const { ids, audioMask, seq, targetStart } = this._buildInput(text, targetFrames, cleanRefText, refCodes, language);
 
     const batchIds = new Int32Array(2 * CODEBOOKS * seq).fill(MASK_ID);
     const batchMask = new Float32Array(2 * seq);
@@ -190,7 +254,8 @@ export class OmniVoiceEngine {
       }
       onStep(step + 1, steps);
     }
-    return this.decode(tokens, [1, CODEBOOKS, targetFrames]);
+    const decoded = await this.decode(tokens, [1, CODEBOOKS, targetFrames]);
+    return postProcessAudio(decoded, reference?.rms ?? null);
   }
 
   dispose() {
