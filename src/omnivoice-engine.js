@@ -121,7 +121,7 @@ function tokenHash(tokens) {
 export class OmniVoiceEngine {
   constructor() {
     this.manifest = null; this.tokenizer = null; this.sessions = null;
-    this.backend = null; this.runtime = null; this.ort = ort; this.files = null; this.urls = new Map();
+    this.backend = null; this.runtime = null; this.ort = ort; this.files = null; this.urls = new Map(); this.threadCount = 1;
   }
 
   async load(files, onStatus = () => {}) {
