@@ -228,12 +228,18 @@ export class OmniVoiceEngine {
     if (logits.length !== 2 * codebooks * sequenceLength * this.runtime.generation.audio_vocab_size) {
       throw new Error(`Unexpected warmup logits length: ${logits.length}`);
     }
+    const decoderInputName = this.runtime.decoderInputName || "codes";
+    const decoderOutputName = this.runtime.decoderOutputName || "waveform_24k";
     const decoderInput = new this.ort.Tensor("int64", new BigInt64Array(codebooks * 8), [codebooks, 1, 8]);
-    const decoderResult = await this.sessions.higgsDecoder.run({ codes: decoderInput });
-    decoderInput.dispose?.();
-    const decoded = decoderResult.waveform_24k;
-    if (!decoded || !decoded.data?.length) throw new Error("Higgs decoder warmup returned no waveform.");
-    decoded.dispose?.();
+    let decoderResult;
+    try {
+      decoderResult = await this.sessions.higgsDecoder.run({ [decoderInputName]: decoderInput });
+      const decoded = decoderResult[decoderOutputName];
+      if (!decoded || !decoded.data?.length) throw new Error("Higgs decoder warmup returned no waveform.");
+      decoded.dispose?.();
+    } finally {
+      decoderInput.dispose?.();
+    }
   }
 
   async #runBackboneStep({ inputIds, audioMask, attentionMask, attentionMaskType = "bool", attentionMaskShape, batch, codebooks, sequenceLength }) {
@@ -262,13 +268,17 @@ export class OmniVoiceEngine {
     const decoderInputName = this.runtime.decoderInputName || "codes";
     const decoderOutputName = this.runtime.decoderOutputName || "waveform_24k";
     const input = new this.ort.Tensor("int64", tokens, [codebooks, 1, targetLength]);
-    const result = await this.sessions.higgsDecoder.run({ [decoderInputName]: input });
-    input.dispose?.();
-    const waveform = result[decoderOutputName];
-    if (!waveform) throw new Error(`Higgs decoder output not found: ${decoderOutputName}`);
-    const pcm = tensorToFloat32(waveform);
-    waveform.dispose?.();
-    return pcm;
+    let result;
+    let waveform;
+    try {
+      result = await this.sessions.higgsDecoder.run({ [decoderInputName]: input });
+      waveform = result[decoderOutputName];
+      if (!waveform) throw new Error(`Higgs decoder output not found: ${decoderOutputName}`);
+      return tensorToFloat32(waveform);
+    } finally {
+      input.dispose?.();
+      waveform?.dispose?.();
+    }
   }
 
   async dispose() {
