@@ -2,10 +2,10 @@
 
 Do not commit model weights or prompt WAV files to this repository.
 
-The browser app expects an ONNX export of the **fine-tuned** checkpoint `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The exporter writes:
+The browser app expects an ONNX export of the **fine-tuned** checkpoint `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The Colab build exports the FP32 backbone, then converts only constant LLM MatMul weights to mobile INT8 and updates the manifest. The bundle contains:
 
 - `audio_embeddings_encoder.onnx` and its external data
-- `llm_decoder.onnx` and its external data
+- `llm_decoder.onnx` and its external data (INT8 weight-only)
 - `audio_heads_decoder.onnx` and its external data
 - `higgs_decoder.onnx` and its external data
 - `tokenizer.json`
@@ -17,4 +17,4 @@ The reference prompt files are downloaded from `Dezheen89/cosyvoice` and are use
 
 Generate the bundle with `notebooks/export_badini_omnivoice.ipynb`. Before importing it on the iPad, run `tools/validate_bundle.py` (the notebook does this automatically). Select all extracted files together in the browser app.
 
-The frontend runs the four-graph OmniVoice inference pipeline in ONNX Runtime Web. The prompt WAVs are encoded once during model export; browser inference consumes only the resulting audio-token IDs. Actual audio quality, memory use, and generation speed still require validation on the target iPad.
+The frontend runs the four-graph OmniVoice inference pipeline in ONNX Runtime Web. The LLM INT8 graph and Higgs decoder are assigned to WASM; audio embedding and audio-head graphs may use WebGPU when available. The prompt WAVs are encoded once during model export; browser inference consumes only the resulting audio-token IDs. Actual audio quality, memory use, and generation speed still require validation on the target iPad.
