@@ -5,7 +5,7 @@ This project includes adapted code from the following projects:
    License: Apache License 2.0
    The adapted legacy browser inference and duration/sampling utilities are identified in their source headers. See LICENSE-APACHE-2.0.
 
-2. Tsukuyomi-chan OmniVoice ONNX
+2. OmniVoice browser runtime\n   Source: https://github.com/RabbitDaisuke/typed-voice\n   License: Apache License 2.0\n   The split-graph browser inference engine and reference-conditioned generation pipeline are adapted from this project. See LICENSE-APACHE-2.0.\n\n3. Tsukuyomi-chan OmniVoice ONNX
    Source: https://github.com/DaisukeDaisuke/tsukuyomichan-omnivoice-onnx
    License: MIT
    The FP32 ONNX export implementation in tools/export_fp32.py is adapted from this project. The original copyright notice is retained in LICENSE-TSUKUYOMICHAN-MIT.
