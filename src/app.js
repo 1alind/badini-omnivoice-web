@@ -8,6 +8,7 @@ const REQUIRED = ["omnivoice_lm.onnx", "audio_encoder.onnx", "audio_decoder.onnx
 
 let engine = null;
 let outputUrl = null;
+const volatileFiles = new Map();
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -29,14 +30,21 @@ async function putFiles(files) {
   db.close();
 }
 async function readFiles() {
-  const db = await openDB();
-  const rows = await new Promise((resolve, reject) => {
-    const request = db.transaction(STORE).objectStore(STORE).getAll();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-  db.close();
-  return rows;
+  let rows = [];
+  try {
+    const db = await openDB();
+    rows = await new Promise((resolve, reject) => {
+      const request = db.transaction(STORE).objectStore(STORE).getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+  } catch {}
+  const merged = new Map(rows.map(row => [row.name, row]));
+  for (const [name, blob] of volatileFiles) {
+    if (!merged.has(name)) merged.set(name, { name, blob, size: blob.size, type: blob.type });
+  }
+  return [...merged.values()];
 }
 async function removeFiles() {
   const db = await openDB();
@@ -83,15 +91,17 @@ $("textInput").addEventListener("input", () => {
 $("modelFiles").addEventListener("change", async event => {
   const selected = [...event.target.files];
   if (!selected.length) return;
-  $("modelStatusText").textContent = "Saving model files to this browser…";
+  for (const file of selected) volatileFiles.set(file.name, file);
+  $("modelStatusText").textContent = "Importing model files…";
   try {
     await putFiles(selected);
+    for (const file of selected) volatileFiles.delete(file.name);
     try { await navigator.storage?.persist?.(); } catch {}
-    renderFiles(await readFiles());
-    $("generationStatus").textContent = "Files imported. Load the model to begin.";
+    $("generationStatus").textContent = "Files imported and saved locally. Load the model to begin.";
   } catch (error) {
-    $("modelStatusText").textContent = "Storage failed: " + error.message + ". Check available iPad storage and try again.";
+    $("generationStatus").textContent = "Browser storage could not keep the large files. They remain available for this tab only. Keep this page open.";
   }
+  renderFiles(await readFiles());
   event.target.value = "";
 });
 
@@ -143,6 +153,7 @@ $("clearBtn").addEventListener("click", async () => {
   engine?.dispose();
   engine = null;
   await removeFiles();
+  volatileFiles.clear();
   renderFiles([]);
   $("engineStatus").textContent = "ENGINE OFF";
   $("generateBtn").disabled = true;
