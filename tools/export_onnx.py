@@ -185,6 +185,8 @@ def main():
         "language": "kmr",
         "sample_rate": 24000,
         "num_audio_codebooks": codebooks,
+        "audio_hop_length": int(hop),
+        "audio_frame_rate": float(tokenizer.config.frame_rate),
         "external_data": external_data,
         "reference_prompts": reference_prompts,
         "precision": args.dtype if device.startswith("cuda") else "fp32",
