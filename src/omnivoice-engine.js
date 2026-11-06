@@ -1,5 +1,6 @@
 /*
- * Adapted from OmniVoice Web, Copyright 2026 Xiaomi Corp. (author: Han Zhu).
+ * Adapted from OmniVoice Web (Apache-2.0), source:
+ * https://github.com/AnEntrypoint/omnivoice
  * Modified for the Badini Voice browser-local inference project.
  * See NOTICE and LICENSE-APACHE-2.0.
  */
