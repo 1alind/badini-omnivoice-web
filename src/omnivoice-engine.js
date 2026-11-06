@@ -1,271 +1,311 @@
 /*
- * Adapted from OmniVoice Web (Apache-2.0), source:
- * https://github.com/AnEntrypoint/omnivoice
- * Modified for the Badini Voice browser-local inference project.
- * See NOTICE and LICENSE-APACHE-2.0.
+ * Adapted from RabbitDaisuke/typed-voice, Apache License 2.0.
+ * Source: https://github.com/RabbitDaisuke/typed-voice
+ * See LICENSE-APACHE-2.0 and NOTICE.
  */
-import * as ort from "onnxruntime-web/webgpu";
 import { Tokenizer } from "@huggingface/tokenizers";
-import { estimateDuration } from "./duration.js";
-import { getTimeSteps, computeSchedule, logSoftmax1D, topkFlatIndices, argmax1D } from "./math-utils.js";
+import * as ort from "onnxruntime-web/webgpu";
+import { buildOmniVoiceAttentionMask, createPythonRandom, generateOmniVoiceCodes, prepareOmniVoiceInputs } from "./omnivoice-generation.js";
 
-const CODEBOOKS = 8;
-const AUDIO_VOCAB = 1025;
-const MASK_ID = 1024;
-const SAMPLE_RATE = 24000;
-
-
-function addTerminalPunctuation(text) {
-  const value = (text || "").trim();
-  if (!value || /[.!?؟。！？]$/.test(value)) return value;
-  return value + ".";
+function halfToFloat(value) {
+  const sign = (value & 0x8000) ? -1 : 1;
+  const exponent = (value >>> 10) & 0x1f;
+  const fraction = value & 0x03ff;
+  if (exponent === 0) return sign * Math.pow(2, -14) * (fraction / 1024);
+  if (exponent === 31) return fraction ? NaN : sign * Infinity;
+  return sign * Math.pow(2, exponent - 15) * (1 + fraction / 1024);
 }
-function trimSilenceEdges(samples, leadMs, trailMs) {
-  if (!samples.length) return samples;
-  const windowSize = Math.max(1, Math.floor(SAMPLE_RATE * 0.01));
+
+function tensorToFloat32(tensor) {
+  if (tensor.data instanceof Float32Array) return new Float32Array(tensor.data);
+  if (tensor.type === "float16" && tensor.data instanceof Uint16Array) {
+    return Float32Array.from(tensor.data, halfToFloat);
+  }
+  return Float32Array.from(tensor.data, Number);
+}
+
+function normalizePcm(input, refRms = null) {
+  let pcm = new Float32Array(input);
+  const sampleRate = 24000;
+  const windowSize = 240;
   const threshold = Math.pow(10, -50 / 20);
-  const windows = Math.ceil(samples.length / windowSize);
+  const makeActivity = samples => {
+    const count = Math.ceil(samples.length / windowSize);
+    const active = new Uint8Array(count);
+    for (let w = 0; w < count; w += 1) {
+      const start = w * windowSize;
+      const end = Math.min(samples.length, start + windowSize);
+      let energy = 0;
+      for (let i = start; i < end; i += 1) energy += samples[i] * samples[i];
+      active[w] = Math.sqrt(energy / Math.max(1, end - start)) > threshold ? 1 : 0;
+    }
+    return active;
+  };
+  let activity = makeActivity(pcm);
   let first = -1, last = -1;
-  for (let w = 0; w < windows; w++) {
-    const start = w * windowSize, end = Math.min(samples.length, start + windowSize);
-    let energy = 0;
-    for (let i = start; i < end; i++) energy += samples[i] * samples[i];
-    const rms = Math.sqrt(energy / Math.max(1, end - start));
-    if (rms > threshold) { if (first < 0) first = w; last = w; }
+  for (let i = 0; i < activity.length; i += 1) if (activity[i]) { if (first < 0) first = i; last = i; }
+  if (first >= 0) {
+    const lead = first * windowSize;
+    const trail = pcm.length - (last + 1) * windowSize;
+    const left = lead > 2400 ? lead - 2400 : 0;
+    const right = trail > 2400 ? Math.min(pcm.length, (last + 1) * windowSize + 2400) : pcm.length;
+    pcm = pcm.slice(left, right);
   }
-  if (first < 0) return samples;
-  const start = Math.max(0, first * windowSize - Math.floor(leadMs * SAMPLE_RATE / 1000));
-  const end = Math.min(samples.length, (last + 1) * windowSize + Math.floor(trailMs * SAMPLE_RATE / 1000));
-  return samples.subarray(start, end);
-}
-function postProcessAudio(samples, refRms) {
-  let output = trimSilenceEdges(samples, 100, 100);
-  if (refRms !== null && refRms < 0.1) {
-    const scale = refRms / 0.1;
-    output = Float32Array.from(output, value => value * scale);
-  }
-  const fadeSamples = Math.floor(SAMPLE_RATE * 0.1);
-  const k = Math.min(fadeSamples, Math.floor(output.length / 2));
-  const faded = new Float32Array(output);
-  if (k > 0) {
-    for (let i = 0; i < k; i++) {
-      const factor = k === 1 ? 0 : i / (k - 1);
-      faded[i] *= factor;
-      faded[faded.length - 1 - i] *= 1 - factor;
+  activity = makeActivity(pcm);
+  const pieces = [];
+  let cursor = 0;
+  let w = 0;
+  while (w < activity.length) {
+    if (activity[w]) { w += 1; continue; }
+    const silentStart = w;
+    while (w < activity.length && !activity[w]) w += 1;
+    const silentEnd = w;
+    if (silentEnd - silentStart > 50) {
+      const cutStart = Math.min(pcm.length, (silentStart + 25) * windowSize);
+      const cutEnd = Math.min(pcm.length, Math.max(cutStart, (silentEnd - 25) * windowSize));
+      if (cutStart > cursor) pieces.push(pcm.subarray(cursor, cutStart));
+      cursor = cutEnd;
     }
   }
-  const pad = Math.floor(SAMPLE_RATE * 0.1);
-  const padded = new Float32Array(faded.length + pad * 2);
-  padded.set(faded, pad);
-  return padded;
+  if (cursor < pcm.length) pieces.push(pcm.subarray(cursor));
+  if (pieces.length > 1) {
+    const total = pieces.reduce((sum, piece) => sum + piece.length, 0);
+    const joined = new Float32Array(total);
+    let offset = 0;
+    for (const piece of pieces) { joined.set(piece, offset); offset += piece.length; }
+    pcm = joined;
+  }
+  if (refRms !== null && refRms < 0.1) {
+    const scale = refRms / 0.1;
+    for (let i = 0; i < pcm.length; i += 1) pcm[i] *= scale;
+  } else if (refRms === null) {
+    let peak = 0;
+    for (const sample of pcm) peak = Math.max(peak, Math.abs(sample));
+    if (peak > 1e-6) {
+      const scale = 0.5 / peak;
+      for (let i = 0; i < pcm.length; i += 1) pcm[i] *= scale;
+    }
+  }
+  const fade = Math.min(Math.floor(sampleRate * 0.1), Math.floor(pcm.length / 2));
+  for (let i = 0; i < fade; i += 1) {
+    const gain = fade <= 1 ? 0 : i / (fade - 1);
+    pcm[i] *= gain;
+    pcm[pcm.length - 1 - i] *= 1 - gain;
+  }
+  const pad = Math.floor(sampleRate * 0.1);
+  const output = new Float32Array(pcm.length + pad * 2);
+  output.set(pcm, pad);
+  return output;
+}
+
+function bigintRange(length, batch) {
+  const result = new BigInt64Array(batch * length);
+  for (let row = 0; row < batch; row += 1) {
+    for (let index = 0; index < length; index += 1) result[row * length + index] = BigInt(index);
+  }
+  return result;
+}
+
+function tokenHash(tokens) {
+  let hash = 0x811c9dc5;
+  for (const token of tokens) {
+    const value = Number(token);
+    hash ^= value & 0xff;
+    hash = Math.imul(hash, 0x01000193);
+    hash ^= (value >>> 8) & 0xff;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 export class OmniVoiceEngine {
   constructor() {
-    this.lm = null;
-    this.encoder = null;
-    this.decoder = null;
-    this.tokenizer = null;
-    this.backend = "wasm";
-    this.hopLength = 960;
+    this.manifest = null; this.tokenizer = null; this.sessions = null;
+    this.backend = null; this.runtime = null; this.ort = ort; this.files = null; this.urls = new Map();
   }
 
-  async load(files, onProgress = () => {}) {
-    const get = async name => {
-      const blob = files.get(name);
-      if (!blob) throw new Error(`Missing required model file: ${name}`);
-      return new Uint8Array(await blob.arrayBuffer());
-    };
-
-    // Keep every runtime asset on this same static origin. No CDN is used.
+  async load(files, onStatus = () => {}) {
+    const manifestBlob = files.get("manifest.json");
+    if (!manifestBlob) throw new Error("manifest.json is missing from the model bundle");
+    const manifest = JSON.parse(await manifestBlob.text());
+    if (!manifest.runtime?.sessions) throw new Error("Model manifest has no split OmniVoice runtime sessions");
+    this.manifest = manifest; this.runtime = manifest.runtime; this.files = files;
     ort.env.wasm.wasmPaths = new URL("./vendor/ort/", document.baseURI).href;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1)) : 1;
-
-    this.backend = navigator.gpu ? "webgpu" : "wasm";
-    const manifest = files.has("manifest.json") ? JSON.parse(await files.get("manifest.json").text()) : {};
-    this.hopLength = Number(manifest.audio_hop_length || 960);
-    const sidecarsFor = async graph => {
-      const names = manifest.external_data?.[graph] || [];
-      const assets = [];
-      for (const name of names) {
-        onProgress(`Reading weights: ${name}`);
-        assets.push({ path: name, data: await get(name) });
+    this.tokenizer = new Tokenizer(JSON.parse(await this.#readText("tokenizer.json")), JSON.parse(await this.#readText("tokenizer_config.json")));
+    const plans = buildSessionPlans(manifest, Boolean(navigator.gpu && this.runtime.preferWebGpu !== false));
+    let lastError;
+    for (const plan of plans) {
+      try {
+        onStatus(`Loading split OmniVoice models using ${plan.label.toUpperCase()}…`);
+        this.sessions = await this.#createSessions(plan, onStatus);
+        this.backend = plan.label;
+        await this.#warmup();
+        onStatus("Model loaded on this device.");
+        return { backend: plan.label, sampleRate: this.runtime.sampleRate };
+      } catch (error) {
+        lastError = error;
+        await this.#releaseSessions();
+        if (plan.defaultBackend === "webgpu") onStatus("WebGPU path failed. Retrying with local WASM CPU…");
       }
-      return assets;
-    };
-    const loadAll = async provider => {
-      const common = { executionProviders: [provider], graphOptimizationLevel: "all" };
-      this.lm = await ort.InferenceSession.create(await get("omnivoice_lm.onnx"), {
-        ...common, externalData: await sidecarsFor("omnivoice_lm.onnx")
-      });
-      onProgress("Loading Higgs audio encoder…");
-      this.encoder = await ort.InferenceSession.create(await get("audio_encoder.onnx"), {
-        ...common, externalData: await sidecarsFor("audio_encoder.onnx")
-      });
-      onProgress("Loading Higgs audio decoder…");
-      this.decoder = await ort.InferenceSession.create(await get("audio_decoder.onnx"), {
-        ...common, externalData: await sidecarsFor("audio_decoder.onnx")
-      });
-    };
+    }
+    throw new Error(`OmniVoice initialization failed: ${lastError?.message || "no usable backend"}`);
+  }
+  async #readText(name) {
+    const blob = this.files.get(name);
+    if (!blob) throw new Error(`Missing required model file: ${name}`);
+    return blob.text();
+  }
+  #fileUrl(name) {
+    const blob = this.files.get(name);
+    if (!blob) throw new Error(`Missing required model file: ${name}`);
+    if (!this.urls.has(name)) this.urls.set(name, URL.createObjectURL(blob));
+    return this.urls.get(name);
+  }
+  async synthesize(text, options = {}) {
+    if (!this.sessions || !this.tokenizer) throw new Error("Load the model files first.");
+    const config = this.runtime.generation;
+    const inputs = await prepareOmniVoiceInputs(text, this.tokenizer, config, options);
+    const numStep = options.numStep ?? config.numStep ?? 32;
+    const generated = await generateOmniVoiceCodes({
+      inputs, config, runBackboneStep: step => this.#runBackboneStep(step), numStep,
+      guidanceScale: options.guidanceScale ?? config.guidanceScale ?? 2,
+      tShift: options.tShift ?? config.tShift ?? 0.1,
+      layerPenalty: options.layerPenalty ?? config.layerPenalty ?? 5,
+      positionTemperature: options.positionTemperature ?? config.positionTemperature ?? 5,
+      classTemperature: options.classTemperature ?? config.classTemperature ?? 0,
+      attentionMode: this.runtime.llmAttention?.mode ?? "omnivoice-noncausal",
+      isCancelled: options.isCancelled, onStep: progress => options.onStep?.(progress),
+      random: options.seed == null ? Math.random : createPythonRandom(options.seed),
+    });
+    const pcm = await this.#decode(generated.tokens, generated.codebooks, generated.targetLength);
+    return { pcm: normalizePcm(pcm, options.refRms ?? null), sampleRate: this.runtime.sampleRate || 24000, backend: this.backend, targetLength: generated.targetLength };
+  }
+  async #createSessions(plan, onStatus) {
+    const sessions = {};
     try {
-      onProgress(`Loading OmniVoice models (${this.backend.toUpperCase()})…`);
-      await loadAll(this.backend);
+      for (const [name, definition] of Object.entries(this.runtime.sessions)) {
+        const provider = plan.backends[name] || plan.defaultBackend;
+        const sessionProvider = definition.executionProvider || provider;
+        const options = { executionProviders: [sessionProvider], graphOptimizationLevel: "all" };
+        if (definition.externalData?.length) {
+          options.externalData = [];
+          for (const entry of definition.externalData) options.externalData.push({ path: entry.path, data: this.#fileUrl(entry.localPath) });
+        }
+        sessions[name] = await ort.InferenceSession.create(this.#fileUrl(definition.model), options);
+        onStatus(`Loaded ${name} (${sessionProvider.toUpperCase()})`);
+      }
+      return sessions;
     } catch (error) {
-      this.lm?.release(); this.encoder?.release(); this.decoder?.release();
-      this.lm = this.encoder = this.decoder = null;
-      if (this.backend !== "webgpu") throw error;
-      onProgress("WebGPU failed. Retrying all models with local WASM CPU runtime…");
-      this.backend = "wasm";
-      await loadAll("wasm");
+      await Promise.allSettled(Object.values(sessions).map(session => session.release?.()));
+      throw error;
     }
-    onProgress("Loading local tokenizer…");
-    const tokenizerJson = JSON.parse(await files.get("tokenizer.json").text());
-    const tokenizerConfig = files.has("tokenizer_config.json") ? JSON.parse(await files.get("tokenizer_config.json").text()) : {};
-    this.tokenizer = new Tokenizer(tokenizerJson, tokenizerConfig);
-    onProgress("Model loaded on this device.");
-    return { backend: this.backend, sampleRate: SAMPLE_RATE };
   }
-
-  _tokens(text) {
-    return this.tokenizer.encode(text).ids;
+  async #releaseSessions() {
+    if (this.sessions) await Promise.allSettled(Object.values(this.sessions).map(session => session.release?.()));
+    this.sessions = null;
   }
-
-  async encodeReference(waveform) {
-    const original = new Float32Array(waveform);
-    let sum = 0;
-    for (const sample of original) sum += sample * sample;
-    const refRms = Math.sqrt(sum / Math.max(1, original.length));
-    let prepared = original;
-    if (refRms > 0 && refRms < 0.1) {
-      const scale = 0.1 / refRms;
-      prepared = Float32Array.from(original, value => value * scale);
+  async #warmup() {
+    const codebooks = this.runtime.generation.num_audio_codebook;
+    const sequenceLength = 4;
+    const inputIds = new BigInt64Array(2 * codebooks * sequenceLength).fill(BigInt(this.runtime.generation.audio_mask_id));
+    const audioMask = new Uint8Array(2 * sequenceLength).fill(1);
+    const attention = buildOmniVoiceAttentionMask({
+      sequenceLength,
+      targetLength: sequenceLength,
+      mode: this.runtime.llmAttention?.mode ?? "legacy-causal-2d",
+    });
+    const logits = await this.#runBackboneStep({
+      inputIds,
+      audioMask,
+      attentionMask: attention.data,
+      attentionMaskType: attention.type,
+      attentionMaskShape: attention.shape,
+      batch: 2,
+      codebooks,
+      sequenceLength,
+    });
+    if (logits.length !== 2 * codebooks * sequenceLength * this.runtime.generation.audio_vocab_size) {
+      throw new Error(`Unexpected warmup logits length: ${logits.length}`);
     }
-    prepared = trimSilenceEdges(prepared, 100, 200);
-    const usableLength = Math.floor(prepared.length / this.hopLength) * this.hopLength;
-    if (!usableLength) throw new Error("Reference audio is too short after trimming.");
-    prepared = prepared.subarray(0, usableLength);
-    const input = new ort.Tensor("float32", prepared, [1, 1, prepared.length]);
-    const result = await this.encoder.run({ waveform: input });
-    input.dispose();
-    const codes = result.audio_codes;
-    const output = { data: new Int32Array(codes.data), dims: Array.from(codes.dims) };
-    codes.dispose?.();
-    return { codes: output, rms: refRms };
+    const decoderInput = new this.ort.Tensor("int64", new BigInt64Array(codebooks * 8), [codebooks, 1, 8]);
+    const decoderResult = await this.sessions.higgsDecoder.run({ codes: decoderInput });
+    decoderInput.dispose?.();
+    const decoded = decoderResult.waveform_24k;
+    if (!decoded || !decoded.data?.length) throw new Error("Higgs decoder warmup returned no waveform.");
+    decoded.dispose?.();
   }
 
-  async decode(codes, dims) {
-    const input = new ort.Tensor("int32", codes, dims);
-    const result = await this.decoder.run({ audio_codes: input });
-    input.dispose();
-    const values = result.audio_values;
-    const output = new Float32Array(values.data);
-    values.dispose?.();
-    return output;
-  }
-
-  _buildInput(text, targetFrames, refText, refCodes, language = "kmr") {
-    const denoise = refCodes ? "<|denoise|>" : "";
-    const style = this._tokens(`${denoise}<|lang_start|>${language}<|lang_end|><|instruct_start|>None<|instruct_end|>`);
-    let fullText = refText ? `${refText.trim()} ${text.trim()}` : text.trim();
-    fullText = fullText.replace(/[ \t]*\r?\n[\s]*/g, ".");
-    fullText = fullText.replace(/(?<=[\u4e00-\u9fff])\s+|\s+(?=[\u4e00-\u9fff])/g, "");
-    fullText = fullText.replace(/\s+(\[(?:sigh|confirmation-en|question-en|question-ah|question-oh|question-ei|question-yi|surprise-ah|surprise-oh|surprise-wa|surprise-yo|dissatisfaction-hnn)\])/g, "$1");
-    const textTokens = this._tokens(`<|text_start|>${fullText}<|text_end|>`);
-    const refFrames = refCodes ? refCodes.dims[2] : 0;
-    const seq = style.length + textTokens.length + refFrames + targetFrames;
-    const ids = new Int32Array(CODEBOOKS * seq).fill(MASK_ID);
-    const audioMask = new Float32Array(seq);
-    for (let c = 0; c < CODEBOOKS; c++) {
-      style.forEach((id, i) => { ids[c * seq + i] = id; });
-      textTokens.forEach((id, i) => { ids[c * seq + style.length + i] = id; });
-      if (refCodes) for (let t = 0; t < refFrames; t++) ids[c * seq + style.length + textTokens.length + t] = refCodes.data[c * refFrames + t];
+  async #runBackboneStep({ inputIds, audioMask, attentionMask, attentionMaskType = "bool", attentionMaskShape, batch, codebooks, sequenceLength }) {
+    const embIds = new ort.Tensor("int64", inputIds, [batch, codebooks, sequenceLength]);
+    const embMask = new ort.Tensor("bool", audioMask, [batch, sequenceLength]);
+    let embeddingsResult;
+    let llmResult;
+    let headsResult;
+    let embedsTensor;
+    let attentionTensor;
+    let hiddenTensor;
+    try {
+      embeddingsResult = await this.sessions.audioEmbeddings.run({ input_ids: embIds, audio_mask: embMask });
+      embedsTensor = new ort.Tensor("float32", tensorToFloat32(embeddingsResult.inputs_embeds), [batch, sequenceLength, this.runtime.hiddenSize]);
+      attentionTensor = new ort.Tensor(attentionMaskType, attentionMask, attentionMaskShape ?? [batch, 1, sequenceLength, sequenceLength]);
+      llmResult = await this.sessions.llm.run({ inputs_embeds: embedsTensor, attention_mask: attentionTensor });
+      hiddenTensor = new ort.Tensor("float32", tensorToFloat32(llmResult.hidden_states), [batch, sequenceLength, this.runtime.hiddenSize]);
+      headsResult = await this.sessions.audioHeads.run({ hidden_states: hiddenTensor });
+      return tensorToFloat32(headsResult.logits);
+    } finally {
+      embIds.dispose?.(); embMask.dispose?.(); embedsTensor?.dispose?.(); attentionTensor?.dispose?.(); hiddenTensor?.dispose?.();
+      embeddingsResult?.inputs_embeds?.dispose?.(); llmResult?.hidden_states?.dispose?.(); headsResult?.logits?.dispose?.();
     }
-    const audioStart = style.length + textTokens.length;
-    audioMask.fill(1, audioStart);
-    return { ids, audioMask, seq, targetStart: audioStart + refFrames };
+  }
+  async #decode(tokens, codebooks, targetLength) {
+    const decoderInputName = this.runtime.decoderInputName || "codes";
+    const decoderOutputName = this.runtime.decoderOutputName || "waveform_24k";
+    const input = new this.ort.Tensor("int64", tokens, [codebooks, 1, targetLength]);
+    const result = await this.sessions.higgsDecoder.run({ [decoderInputName]: input });
+    input.dispose?.();
+    const waveform = result[decoderOutputName];
+    if (!waveform) throw new Error(`Higgs decoder output not found: ${decoderOutputName}`);
+    const pcm = tensorToFloat32(waveform);
+    waveform.dispose?.();
+    return pcm;
   }
 
-  async _forward(ids, audioMask, attentionMask, seq) {
-    const idTensor = new ort.Tensor("int32", ids, [2, CODEBOOKS, seq]);
-    const audioTensor = new ort.Tensor("float32", audioMask, [2, seq]);
-    const attentionTensor = new ort.Tensor("float32", attentionMask, [2, 1, seq, seq]);
-    const result = await this.lm.run({ input_ids: idTensor, audio_mask: audioTensor, attention_mask: attentionTensor });
-    idTensor.dispose(); audioTensor.dispose(); attentionTensor.dispose();
-    const logits = new Float32Array(result.logits.data);
-    result.logits.dispose?.();
-    return logits;
-  }
-
-  async generate(text, { refAudio, refText, language = "kmr", steps = 32, guidance = 2, positionTemperature = 5, onStep = () => {} } = {}) {
-    if (!this.lm || !this.tokenizer) throw new Error("Load the model files first.");
-    if (!text.trim()) throw new Error("Enter some Badini text.");
-    const reference = refAudio ? await this.encodeReference(refAudio) : null;
-    const refCodes = reference?.codes || null;
-    const cleanRefText = addTerminalPunctuation(refText || "");
-    const refFrames = refCodes?.dims?.[2] || 25;
-    const targetFrames = estimateDuration(text, cleanRefText || "Nice to meet you.", refFrames);
-    const { ids, audioMask, seq, targetStart } = this._buildInput(text, targetFrames, cleanRefText, refCodes, language);
-
-    const batchIds = new Int32Array(2 * CODEBOOKS * seq).fill(MASK_ID);
-    const batchMask = new Float32Array(2 * seq);
-    const attention = new Float32Array(2 * seq * seq);
-    batchIds.set(ids, 0);
-    batchMask.set(audioMask, 0);
-    for (let c = 0; c < CODEBOOKS; c++) {
-      for (let t = 0; t < targetFrames; t++) batchIds[CODEBOOKS * seq + c * seq + t] = ids[c * seq + targetStart + t];
-    }
-    batchMask.fill(1, seq, seq + targetFrames);
-    for (let q = 0; q < seq; q++) for (let k = 0; k < seq; k++) attention[q * seq + k] = 1;
-    for (let q = 0; q < targetFrames; q++) for (let k = 0; k < targetFrames; k++) attention[seq * seq + q * seq + k] = 1;
-    for (let i = targetFrames; i < seq; i++) attention[seq * seq + i * seq + i] = 1;
-
-    const tokens = new Int32Array(CODEBOOKS * targetFrames).fill(MASK_ID);
-    const schedule = computeSchedule(targetFrames, CODEBOOKS, steps, getTimeSteps(0, 1, steps, 0.1));
-    const conditionalStride = CODEBOOKS * seq * AUDIO_VOCAB;
-
-    for (let step = 0; step < steps; step++) {
-      const logits = await this._forward(batchIds, batchMask, attention, seq);
-      const predicted = new Int32Array(CODEBOOKS * targetFrames);
-      const scores = new Float32Array(CODEBOOKS * targetFrames).fill(-Infinity);
-      for (let c = 0; c < CODEBOOKS; c++) {
-        for (let t = 0; t < targetFrames; t++) {
-          const condOffset = c * seq * AUDIO_VOCAB + (targetStart + t) * AUDIO_VOCAB;
-          const uncondOffset = conditionalStride + c * seq * AUDIO_VOCAB + t * AUDIO_VOCAB;
-          const cond = logSoftmax1D(logits, condOffset, AUDIO_VOCAB);
-          const uncond = logSoftmax1D(logits, uncondOffset, AUDIO_VOCAB);
-          const guided = new Float32Array(AUDIO_VOCAB);
-          for (let v = 0; v < AUDIO_VOCAB; v++) guided[v] = cond[v] + guidance * (cond[v] - uncond[v]);
-          const finalLogits = logSoftmax1D(guided, 0, AUDIO_VOCAB);
-          finalLogits[MASK_ID] = -Infinity;
-          const token = argmax1D(finalLogits, 0, AUDIO_VOCAB);
-          const index = c * targetFrames + t;
-          predicted[index] = token;
-          scores[index] = finalLogits[token] - c * 5;
-        }
-      }
-      if (positionTemperature > 0) {
-        for (let i = 0; i < scores.length; i++) {
-          const u = Math.random();
-          scores[i] = scores[i] / positionTemperature - Math.log(-Math.log(u + 1e-10) + 1e-10);
-        }
-      }
-      for (let i = 0; i < scores.length; i++) if (tokens[i] !== MASK_ID) scores[i] = -Infinity;
-      const chosen = topkFlatIndices(scores, schedule[step]);
-      for (const index of chosen) {
-        const c = Math.floor(index / targetFrames), t = index % targetFrames;
-        const token = predicted[index];
-        tokens[index] = token;
-        batchIds[c * seq + targetStart + t] = token;
-        batchIds[CODEBOOKS * seq + c * seq + t] = token;
-      }
-      onStep(step + 1, steps);
-    }
-    const decoded = await this.decode(tokens, [1, CODEBOOKS, targetFrames]);
-    return postProcessAudio(decoded, reference?.rms ?? null);
-  }
-
-  dispose() {
-    this.lm?.release(); this.encoder?.release(); this.decoder?.release();
-    this.lm = this.encoder = this.decoder = this.tokenizer = null;
+  async dispose() {
+    await this.#releaseSessions();
+    for (const url of this.urls.values()) URL.revokeObjectURL(url);
+    this.urls.clear();
+    this.backend = null; this.tokenizer = null; this.files = null;
   }
 }
+
+function buildSessionPlans(manifest, webGpuAvailable) {
+  if (!webGpuAvailable) {
+    return [{ label: "wasm", defaultBackend: "wasm", backends: {} }];
+  }
+
+  const isMobileInt8 = manifest.runtimeSource?.qualityProfile === "mobile-int8-weight-only"
+    || manifest.conversion?.targetProfile === "mobile-int8-weight-only";
+  const isMobileInt4 = manifest.runtimeSource?.qualityProfile === "mobile-int4-weight-only"
+    || manifest.conversion?.targetProfile === "mobile-int4-weight-only";
+  if (isMobileInt8 || isMobileInt4) {
+    return [
+      {
+        label: "webgpu+llm-wasm+higgs-wasm",
+        defaultBackend: "webgpu",
+        backends: { llm: "wasm", higgsDecoder: "wasm" },
+      },
+      { label: "wasm", defaultBackend: "wasm", backends: {} },
+    ];
+  }
+
+  return [
+    {
+      label: "webgpu+higgs-wasm",
+      defaultBackend: "webgpu",
+      backends: { higgsDecoder: "wasm" },
+    },
+    { label: "wasm", defaultBackend: "wasm", backends: {} },
+  ];
+}
+
