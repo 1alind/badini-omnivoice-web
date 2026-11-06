@@ -5,7 +5,7 @@ import argparse, json, shutil
 from pathlib import Path
 import numpy as np
 import torch, torchaudio, onnx
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import hf_hub_download, model_info, snapshot_download
 from transformers import HiggsAudioV2TokenizerModel
 from export_fp32 import save_backbone, save_higgs
 
@@ -28,14 +28,14 @@ def external_files(graph):
             locations.update(item.value for item in tensor.external_data if item.key == "location")
     return [{"path": name, "localPath": name} for name in sorted(locations)]
 
-def encode_prompts(codec, repo, out):
+def encode_prompts(codec, repo, revision, out):
     prompts = []
     sr_target = int(getattr(codec.config, "sampling_rate", 24000) or 24000)
     hop = int(codec.config.hop_length)
     for voice, emotion, stem in PROMPTS:
         try:
-            wav = hf_hub_download(repo, stem + ".wav")
-            txt = hf_hub_download(repo, stem + ".txt")
+            wav = hf_hub_download(repo, stem + ".wav", revision=revision)
+            txt = hf_hub_download(repo, stem + ".txt", revision=revision)
             audio, sr = torchaudio.load(wav)
             if audio.shape[0] > 1: audio = audio.mean(dim=0, keepdim=True)
             if sr != sr_target: audio = torchaudio.functional.resample(audio, sr, sr_target)
@@ -67,8 +67,11 @@ def main():
     a=p.parse_args()
     out=Path(a.out).resolve(); work=Path(a.work).resolve()
     out.mkdir(parents=True,exist_ok=True); work.mkdir(parents=True,exist_ok=True)
-    source=Path(snapshot_download(repo_id=a.model_id,allow_patterns=["model.safetensors","config.json","tokenizer.json","tokenizer_config.json","chat_template.jinja"],local_dir=work/"fine-tuned-source"))
-    higgs_root=Path(snapshot_download(repo_id=a.higgs_repo,allow_patterns=["audio_tokenizer/**"],local_dir=work/"higgs-source"))
+    voice_revision = model_info(a.model_id).sha
+    higgs_revision = model_info(a.higgs_repo).sha
+    reference_revision = model_info(a.reference_repo).sha
+    source=Path(snapshot_download(repo_id=a.model_id,revision=voice_revision,allow_patterns=["model.safetensors","config.json","tokenizer.json","tokenizer_config.json","chat_template.jinja"],local_dir=work/"fine-tuned-source"))
+    higgs_root=Path(snapshot_download(repo_id=a.higgs_repo,revision=higgs_revision,allow_patterns=["audio_tokenizer/**"],local_dir=work/"higgs-source"))
     higgs=higgs_root/"audio_tokenizer"
     print("Exporting the exact fine-tuned Badini checkpoint…")
     save_backbone(source,work,out)
@@ -76,7 +79,7 @@ def main():
     save_higgs(higgs,work,out)
     codec=HiggsAudioV2TokenizerModel.from_pretrained(str(higgs),dtype=torch.float32)
     codec.eval()
-    prompts,sample_rate,hop=encode_prompts(codec,a.reference_repo,out)
+    prompts,sample_rate,hop=encode_prompts(codec,a.reference_repo,reference_revision,out)
     del codec
     for name in ("tokenizer.json","tokenizer_config.json"):
         if not (out/name).is_file(): raise RuntimeError(f"Missing {name}")
@@ -87,7 +90,7 @@ def main():
       "higgsDecoder":{"model":"higgs_decoder.onnx","externalData":external_files(out/"higgs_decoder.onnx")},
     }
     manifest={
-      "model_id":a.model_id,"language":"kmr","sample_rate":sample_rate,"audio_hop_length":hop,
+      "model_id":a.model_id,"language":"kmr","sample_rate":sample_rate,"audio_hop_length":hop,"source_revisions":{"voice":voice_revision,"higgs":higgs_revision,"references":reference_revision},
       "num_audio_codebooks":8,"precision":"fp32","reference_prompts":prompts,
       "runtime":{
         "sampleRate":sample_rate,"preferWebGpu":True,"hiddenSize":1024,"numKvHeads":8,"headDim":128,
