@@ -285,6 +285,29 @@ def replace_release_llm(release: Path, quantized_model: Path) -> None:
         shutil.copy2(source, destination)
 
 
+def update_runtime_manifest(release: Path, bits: int, node_count: int, metrics: dict[str, dict[str, float]]) -> None:
+    manifest_path = release / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    llm_path = release / "llm_decoder.onnx"
+    locations = sorted(external_locations(llm_path))
+    llm = manifest["runtime"]["sessions"]["llm"]
+    llm["externalData"] = [{"path": name, "localPath": name} for name in locations]
+    llm["executionProvider"] = "wasm"
+    # Keep the Higgs decoder on WASM for the known-good audio decode path.
+    manifest["runtime"]["sessions"]["higgsDecoder"]["executionProvider"] = "wasm"
+    manifest["runtime"]["qualityProfile"] = f"mobile-int{bits}-weight-only"
+    manifest["precision"] = f"fp32-components-int{bits}-llm"
+    manifest["quantization"] = {
+        "scope": "llm-only",
+        "bits": bits,
+        "block_size": BLOCK_SIZE,
+        "accuracy_level": ACCURACY_LEVEL,
+        "matmul_nbits_nodes": node_count,
+        "equivalence": metrics,
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--work-dir", required=True)
@@ -328,6 +351,7 @@ def main() -> None:
     )
     replace_release_llm(release, output_model)
     validate_mobile_graph(release / "llm_decoder.onnx", bits)
+    update_runtime_manifest(release, bits, node_count, metrics)
     print(
         f"Mobile LLM quantization PASS: MatMulNBits={node_count}, bits={bits}, "
         f"block={BLOCK_SIZE}, accuracy_level={ACCURACY_LEVEL}, "
