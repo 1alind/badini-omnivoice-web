@@ -4,7 +4,7 @@ import { encodeWAV } from "./audio.js";
 const $ = id => document.getElementById(id);
 const DB_NAME = "badini-voice-local";
 const STORE = "model-files";
-const REQUIRED = ["omnivoice_lm.onnx", "audio_encoder.onnx", "audio_decoder.onnx", "tokenizer.json", "tokenizer_config.json", "manifest.json"];
+const REQUIRED = ["manifest.json", "audio_embeddings_encoder.onnx", "llm_decoder.onnx", "audio_heads_decoder.onnx", "higgs_decoder.onnx", "tokenizer.json", "tokenizer_config.json"];
 
 let engine = null;
 let outputUrl = null;
