@@ -1,5 +1,5 @@
-import { OmniVoiceEngine } from "./omnivoice-engine.js";
-import { decodeAudioFile, encodeWAV } from "./audio.js";
+import { OmniVoiceEngine } from "./omnivoice-engine-v2.js";
+import { encodeWAV } from "./audio.js";
 
 const $ = id => document.getElementById(id);
 const DB_NAME = "badini-voice-local";
@@ -101,9 +101,8 @@ function refreshEmotionOptions() {
 }
 async function applySelectedPrompt() {
   const prompt = selectedPrompt();
-  $("refAudio").value = "";
   if (!prompt) {
-    $("promptStatus").textContent = "CUSTOM PROMPT";
+    $("promptStatus").textContent = "PROMPT NOT INCLUDED";
     $("refText").value = "";
     return;
   }
@@ -152,9 +151,16 @@ $("loadBtn").addEventListener("click", async () => {
     const missing = REQUIRED.filter(name => !files.has(name));
     if (missing.length) throw new Error("Missing files: " + missing.join(", "));
     const manifest = files.has("manifest.json") ? JSON.parse(await files.get("manifest.json").text()) : {};
-    const sidecars = Object.values(manifest.external_data || {}).flat();
-    for (const external of sidecars) {
-      if (!files.has(external)) throw new Error("Missing external weight file: " + external);
+    for (const definition of Object.values(manifest.runtime?.sessions || {})) {
+      if (!files.has(definition.model)) throw new Error("Missing graph file: " + definition.model);
+      for (const external of definition.externalData || []) {
+        if (!files.has(external.localPath)) throw new Error("Missing external weight file: " + external.localPath);
+      }
+    }
+    for (const prompt of manifest.reference_prompts || []) {
+      if (!files.has(prompt.audio_tokens) || !files.has(prompt.text)) {
+        throw new Error("Missing voice prompt files for " + prompt.voice + "/" + prompt.emotion);
+      }
     }
     engine?.dispose();
     engine = new OmniVoiceEngine();
@@ -208,14 +214,6 @@ $("voiceSelect").addEventListener("change", async () => {
   await applySelectedPrompt();
 });
 $("emotionSelect").addEventListener("change", applySelectedPrompt);
-$("refAudio").addEventListener("change", () => {
-  if ($("refAudio").files[0]) {
-    $("promptStatus").textContent = "CUSTOM AUDIO";
-    $("refText").value = "";
-  } else {
-    applySelectedPrompt();
-  }
-});
 
 $("generateBtn").addEventListener("click", async () => {
   if (!engine) return;
@@ -231,32 +229,31 @@ $("generateBtn").addEventListener("click", async () => {
   $("generationStatus").textContent = "Preparing the reference voice…";
 
   try {
-    const customReference = $("refAudio").files[0];
     const prompt = selectedPrompt();
-    let referenceFile = customReference;
-    let referenceText = $("refText").value.trim();
-    if (!customReference) {
-      if (!prompt) throw new Error("That speaker/emotion reference is not included. Choose another preset or upload your own WAV.");
-      referenceFile = loadedFiles.get(prompt.audio);
-      const transcriptFile = loadedFiles.get(prompt.text);
-      if (!referenceText && transcriptFile) referenceText = (await transcriptFile.text()).trim();
-    }
-    if (!referenceFile) throw new Error("Reference WAV is missing. Re-import the selected prompt files or choose a custom recording.");
-    if (!referenceText) throw new Error("The exact transcript for the selected reference WAV is required.");
-
-    const refAudio = await decodeAudioFile(referenceFile);
+    if (!prompt) throw new Error("The selected speaker/emotion prompt is not included in this model bundle.");
+    const tokenBlob = loadedFiles.get(prompt.audio_tokens);
+    if (!tokenBlob) throw new Error("Pre-encoded voice prompt tokens are missing.");
+    const tokenBuffer = await tokenBlob.arrayBuffer();
+    if (tokenBuffer.byteLength !== prompt.codebooks * prompt.frames * 4) throw new Error("Voice prompt token file has an invalid size.");
+    const refAudioTokens = new Int32Array(tokenBuffer);
+    const referenceText = (await loadedFiles.get(prompt.text).text()).trim();
+    if (!referenceText) throw new Error("The selected voice prompt has no transcript.");
     const started = performance.now();
-    const samples = await engine.generate(text, {
-      refAudio,
-      refText: referenceText || null,
+    const result = await engine.synthesize(text, {
+      refAudioTokens,
+      refText: referenceText,
+      refRms: prompt.rms,
       language: $("languageSelect").value,
-      steps: Number($("stepsSelect").value),
-      onStep(step, total) {
-        $("progressBar").value = step;
-        $("progressText").textContent = `Generating audio · step ${step} / ${total}`;
+      numStep: Number($("stepsSelect").value),
+      onStep(progress) {
+        if (progress.step) {
+          $("progressBar").value = progress.step;
+          $("progressText").textContent = "Generating audio · step " + progress.step + " / " + progress.numStep;
+        }
       }
     });
-    const wav = encodeWAV(samples, 24000);
+    const samples = result.pcm;
+    const wav = encodeWAV(samples, result.sampleRate);
     if (outputUrl) URL.revokeObjectURL(outputUrl);
     outputUrl = URL.createObjectURL(wav);
     $("audioPlayer").src = outputUrl;
@@ -266,7 +263,7 @@ $("generateBtn").addEventListener("click", async () => {
     $("audioStatus").textContent = "READY";
     const seconds = (samples.length / 24000).toFixed(1);
     const elapsed = ((performance.now() - started) / 1000).toFixed(1);
-    $("generationStatus").textContent = `Generated ${seconds}s of audio in ${elapsed}s on this device.`;
+    $("generationStatus").textContent = `Generated ${seconds}s of audio in ${elapsed}s on this device (${result.backend.toUpperCase()}).`;
   } catch (error) {
     $("audioStatus").textContent = "ERROR";
     $("generationStatus").textContent = error.message;
