@@ -33,6 +33,7 @@ def export_module(module, args, path: Path, input_names, output_names, dynamic_a
         all_tensors_to_one_file=True,
         location=data_name,
         convert_attribute=False,
+        size_threshold=(2**31 - 1) if args.dtype == "fp16" else 1024,
     )
     print(f"Exported {path.name} (+ {data_name} when needed)")
 
@@ -142,13 +143,16 @@ def main():
         print(f"WARNING: default Hayfa prompt was not copied: {exc}")
         print("Add a 24 kHz reference WAV and its exact transcript before generating.")
 
-    external = "omnivoice_lm.onnx.data"
+    external_data = {}
+    for graph_name in ("omnivoice_lm.onnx", "audio_encoder.onnx", "audio_decoder.onnx"):
+        sidecar = graph_name + ".data"
+        external_data[graph_name] = [sidecar] if (out / sidecar).exists() else []
     manifest = {
         "model_id": args.model_path,
         "language": "kmr",
         "sample_rate": 24000,
         "num_audio_codebooks": codebooks,
-        "lm_external_data": [external] if (out / external).exists() else [],
+        "external_data": external_data,
         "precision": args.dtype if device.startswith("cuda") else "fp32",
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
