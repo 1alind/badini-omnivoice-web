@@ -32,7 +32,7 @@
       <label class="file-drop" for="modelFiles">
         <span class="upload-icon">＋</span>
         <strong>Select exported model files</strong>
-        <span>ONNX graphs, weights, tokenizer, manifest and Hayfa prompt</span>
+        <span>Four ONNX graphs, external weights, tokenizer and pre-encoded voice prompts</span>
         <input id="modelFiles" type="file" multiple>
       </label>
       <ul id="fileList" class="file-list"><li class="empty">No model files imported.</li></ul>
@@ -55,17 +55,15 @@
 
     <section class="panel">
       <div class="section-head"><div><p class="eyebrow">03 / VOICE</p><h3>Choose a reference voice</h3></div><span class="status" id="promptStatus">HAYFA · NATURAL</span></div>
-      <p class="sub small">Each voice and emotion is a reference recording used for zero-shot voice cloning. Emotion comes from the selected recording, not a separate emotion-control model.</p>
+      <p class="sub small">Each option uses a real Badini reference recording, pre-encoded during model preparation. Emotion comes from the selected recording, not a separate emotion slider.</p>
       <div class="controls">
         <label class="field-label" for="voiceSelect">VOICE</label>
         <select id="voiceSelect"><option value="hayfa">Hayfa</option><option value="abdullah">Abdullah</option><option value="bafreen">Bafreen</option></select>
         <label class="field-label" for="emotionSelect">REFERENCE EMOTION</label>
         <select id="emotionSelect"><option value="natural">Natural</option><option value="angry">Angry</option><option value="sad">Sad</option><option value="happy">Happy</option><option value="fear">Fear</option><option value="surprise">Surprise</option></select>
       </div>
-      <label class="field-label" for="refAudio">CUSTOM REFERENCE AUDIO (OPTIONAL)</label>
-      <input id="refAudio" type="file" accept="audio/*">
-      <label class="field-label" for="refText" style="margin-top:14px">EXACT REFERENCE TRANSCRIPT</label>
-      <textarea id="refText" rows="3" placeholder="The selected prompt's transcript appears here..." dir="auto"></textarea>
+      <label class="field-label" for="refText" style="margin-top:14px">REFERENCE TRANSCRIPT</label>
+      <textarea id="refText" rows="3" readonly dir="auto"></textarea>
     </section>
 
     <section class="panel">
