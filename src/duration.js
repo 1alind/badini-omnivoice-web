@@ -1,3 +1,8 @@
+/*
+ * Adapted from OmniVoice Web, Copyright 2026 Xiaomi Corp. (author: Han Zhu).
+ * Modified for the Badini Voice browser-local inference project.
+ * See NOTICE and LICENSE-APACHE-2.0.
+ */
 const WEIGHT = { arabic: 1.5, latin: 1, digit: 3.5, punctuation: .5, space: .2, mark: 0, other: 1 };
 function weightOf(char) {
   const cp = char.codePointAt(0);
