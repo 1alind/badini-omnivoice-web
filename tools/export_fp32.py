@@ -1,10 +1,12 @@
 # Adapted from DaisukeDaisuke/tsukuyomichan-omnivoice-onnx/scripts/export_fp32.py
 # Copyright and license notices are retained in NOTICE; see upstream MIT license.
 #!/usr/bin/env python3
-"""Export the pinned Tsukuyomichan OmniVoice checkpoint without quantization.
+"""Export the exact Dezheen89/omnivoice fine-tuned checkpoint without quantization.
 
-The source checkpoint is only a build input. The release directory receives
-split ONNX runtime models and metadata, never the original safetensors file.
+The source checkpoint is loaded from the selected Hugging Face repository path.
+The release directory receives split ONNX runtime graphs and metadata, never
+the original safetensors file. The OmniVoice Python package supplies the model
+architecture implementation; it does not supply or replace the checkpoint weights.
 """
 from __future__ import annotations
 
@@ -344,7 +346,7 @@ def save_backbone(source_dir: Path, work: Path, release: Path) -> None:
         attn_implementation="eager",
     )
     model.eval()
-    assert_fp32_module(model, "Tsukuyomichan full-finetune source")
+    assert_fp32_module(model, "Dezheen89/omnivoice fine-tuned checkpoint")
 
     # Preserve runtime tokenizer/config from the exact voice checkpoint.
     for name in ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja"):
