@@ -1,3 +1,8 @@
+/*
+ * Adapted from OmniVoice Web, Copyright 2026 Xiaomi Corp. (author: Han Zhu).
+ * Modified for the Badini Voice browser-local inference project.
+ * See NOTICE and LICENSE-APACHE-2.0.
+ */
 export function getTimeSteps(start, end, count, shift) {
   return Array.from({ length: count + 1 }, (_, i) => {
     const t = start + (end - start) * i / count;
