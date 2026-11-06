@@ -2,19 +2,19 @@
 
 Do not commit model weights or generated prompt-token files to this repository.
 
-The browser app expects an ONNX export of the **fine-tuned** checkpoint `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The Colab build exports FP32 graphs and splits large external weight data into separate files:
+The Colab build first exports the fine-tuned checkpoint `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`) into four FP32 ONNX graphs, then converts **only the LLM's constant MatMul weights** to mobile INT8 `MatMulNBits` weights:
 
-- `audio_embeddings_encoder.onnx` and its external data
-- `llm_decoder.onnx` and its external data
-- `audio_heads_decoder.onnx` and its external data
-- `higgs_decoder.onnx` and its external data
+- `audio_embeddings_encoder.onnx` and external data: FP32
+- `llm_decoder.onnx` and external data: weight-only INT8, block size 128
+- `audio_heads_decoder.onnx` and external data: FP32
+- `higgs_decoder.onnx` and external data: FP32
 - `tokenizer.json`
 - `tokenizer_config.json`
 - `manifest.json`
 - Pre-encoded voice/emotion token files (`.i32`) and exact transcripts listed in `manifest.json`
 
-Hayfa's natural reference sample is taken from the fine-tuned model repository itself. The additional voice/emotion reference samples are downloaded from `Dezheen89/cosyvoice`. All samples are encoded with the Higgs Audio V2 codec from `k2-fsa/OmniVoice`; the CosyVoice model weights are not included or used.
+The quantizer checks the INT8 LLM against the FP32 reference before replacing it. Activations remain FP32. The manifest marks the `mobile-int8-weight-only` profile so the browser runs the LLM and Higgs decoder through WASM, while audio embeddings and audio heads may use WebGPU. The app falls back to all-WASM if the mixed path fails.
 
-Generate the bundle with `notebooks/export_badini_omnivoice.ipynb`. The notebook runs `tools/validate_bundle.py` before download. Select all extracted files together in the browser app.
+Hayfa's natural reference sample is taken from the fine-tuned model repository itself. Additional voice/emotion samples come from `Dezheen89/cosyvoice`. All samples are encoded with the Higgs Audio V2 codec from `k2-fsa/OmniVoice`; CosyVoice model weights are not included or used.
 
-The frontend runs the four-graph OmniVoice pipeline in ONNX Runtime Web. The app tries WebGPU for the backbone graphs when available and uses WASM for the Higgs decoder, with an all-WASM fallback. Reference prompts are pre-encoded during the one-time export, so Safari does not need to encode raw prompt audio.
+Generate the bundle with `notebooks/export_badini_omnivoice.ipynb`. The notebook runs FP32 export, prompt encoding, mobile INT8 conversion, and bundle validation before download. Select all extracted files together in the browser app.
