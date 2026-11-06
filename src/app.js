@@ -42,7 +42,7 @@ async function readFiles() {
   } catch {}
   const merged = new Map(rows.map(row => [row.name, row]));
   for (const [name, blob] of volatileFiles) {
-    if (!merged.has(name)) merged.set(name, { name, blob, size: blob.size, type: blob.type });
+    merged.set(name, { name, blob, size: blob.size, type: blob.type });
   }
   return [...merged.values()];
 }
