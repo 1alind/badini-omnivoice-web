@@ -1,35 +1,19 @@
 import { estimateDuration } from "./duration.js";
 
-function splitLongWord(word, referenceText, referenceFrames, maxFrames) {
-  const parts = [];
-  let current = "";
-  for (const character of [...word]) {
-    const candidate = current + character;
-    if (current && estimateDuration(candidate, referenceText, referenceFrames) > maxFrames) {
-      parts.push(current);
-      current = character;
-    } else current = candidate;
-  }
-  if (current) parts.push(current);
-  return parts;
-}
-
 export function splitTextIntoChunks(text, referenceText, referenceFrames, maxFrames) {
   const sentences = text.match(/[^.!?؟۔…]+[.!?؟۔…]?/gu) || [text];
   const chunks = [];
   let current = "";
   const appendWords = sentence => {
     for (const word of sentence.trim().split(/\s+/u).filter(Boolean)) {
-      const pieces = estimateDuration(word, referenceText, referenceFrames) > maxFrames
-        ? splitLongWord(word, referenceText, referenceFrames, maxFrames)
-        : [word];
-      for (const piece of pieces) {
-        const candidate = current ? current + " " + piece : piece;
-        if (current && estimateDuration(candidate, referenceText, referenceFrames) > maxFrames) {
-          chunks.push(current);
-          current = piece;
-        } else current = candidate;
+      if (estimateDuration(word, referenceText, referenceFrames) > maxFrames) {
+        throw new Error("One unbroken word is too long for a single generation. Add spaces or shorten it.");
       }
+      const candidate = current ? current + " " + word : word;
+      if (current && estimateDuration(candidate, referenceText, referenceFrames) > maxFrames) {
+        chunks.push(current);
+        current = word;
+      } else current = candidate;
     }
   };
   for (const sentence of sentences) {
@@ -47,7 +31,7 @@ export function splitTextIntoChunks(text, referenceText, referenceFrames, maxFra
   return chunks.length ? chunks : [text.trim()];
 }
 
-export function joinPcm(chunks, sampleRate, pauseSeconds = 0.18) {
+export function joinPcm(chunks, sampleRate, pauseSeconds = 0.1) {
   const pause = Math.round(sampleRate * pauseSeconds);
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0) + pause * Math.max(0, chunks.length - 1);
   const output = new Float32Array(total);
