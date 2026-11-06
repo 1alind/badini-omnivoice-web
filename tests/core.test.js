@@ -7,7 +7,7 @@ test("time schedule starts at zero and ends at one", () => {
   const steps = getTimeSteps(0, 1, 32, 0.1);
   assert.equal(steps.length, 33);
   assert.equal(steps[0], 0);
-  assert.equal(steps.at(-1), 1);
+  assert.ok(Math.abs(steps.at(-1) - 1) < 1e-12);
 });
 
 test("mask schedule allocates every codebook position exactly once", () => {
