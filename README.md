@@ -7,7 +7,7 @@ A static, offline-first web app for generating Badini Kurdish speech using the [
 - Imports ONNX model files from the user's device.
 - Stores them in browser IndexedDB when quota permits, with a current-tab memory fallback.
 - Runs the OmniVoice inference loop in JavaScript with ONNX Runtime Web.
-- Uses Hayfa, Abdullah, and Bafreen reference recordings (including available emotion samples), or a user-provided reference recording.
+- Uses Hayfa, Abdullah, and Bafreen reference audio samples (including available emotion samples), or a user-provided reference recording.
 - Exports generated speech as 24 kHz mono WAV.
 - Caches the static app/runtime locally so it can be reopened offline after the first visit.
 
