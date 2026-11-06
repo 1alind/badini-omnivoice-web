@@ -13,7 +13,7 @@ This project includes adapted code from the following projects:
 3. Tsukuyomi-chan OmniVoice ONNX
    Source: https://github.com/DaisukeDaisuke/tsukuyomichan-omnivoice-onnx
    License: MIT
-   The FP32 ONNX export implementation in tools/export_fp32.py is adapted from this project. The original copyright notice is retained in LICENSE-TSUKUYOMICHAN-MIT.
+   The FP32 ONNX export implementation in tools/export_fp32.py and mobile INT8 quantizer in tools/quantize_mobile_int8.py are adapted from this project. The original copyright notice is retained in LICENSE-TSUKUYOMICHAN-MIT.
 
 The remaining original project files are provided under the MIT License in LICENSE.
 
