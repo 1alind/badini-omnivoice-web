@@ -24,6 +24,8 @@ Default checkpoint: `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The no
 - model manifest
 - speaker/emotion reference WAVs and exact transcripts
 
+The notebook runs `tools/validate_bundle.py` before zipping, checking ONNX graph names, tokenizer files, and prompt pairs.
+
 Download the ZIP, extract it in the iPad Files app, and keep the extracted folder. The ZIP can be large. Do not upload model weights to this GitHub repository.
 
 ## 2. Build / host the static app
