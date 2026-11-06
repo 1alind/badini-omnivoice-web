@@ -122,7 +122,7 @@ $("textInput").addEventListener("input", () => {
 $("modelFiles").addEventListener("change", async event => {
   const selected = [...event.target.files];
   if (!selected.length) return;
-  engine?.dispose();
+  await engine?.dispose();
   engine = null;
   loadedManifest = null;
   loadedFiles = new Map();
@@ -164,7 +164,7 @@ $("loadBtn").addEventListener("click", async () => {
         throw new Error("Missing voice prompt files for " + prompt.voice + "/" + prompt.emotion);
       }
     }
-    engine?.dispose();
+    await engine?.dispose();
     engine = new OmniVoiceEngine();
     await engine.load(files, message => {
       $("generationStatus").textContent = message;
@@ -180,7 +180,7 @@ $("loadBtn").addEventListener("click", async () => {
     $("generationStatus").textContent = `Ready. Inference backend: ${engine.backend.toUpperCase()}. The model runs locally on this device.`;
 
   } catch (error) {
-    engine?.dispose();
+    await engine?.dispose();
     engine = null;
     $("modelStatus").textContent = "LOAD FAILED";
     $("engineStatus").textContent = "ENGINE OFF";
