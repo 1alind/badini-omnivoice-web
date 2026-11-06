@@ -1,4 +1,4 @@
-import { OmniVoiceEngine } from "./omnivoice-engine-v2.js";
+import { OmniVoiceEngine } from "./omnivoice-engine.js";
 import { encodeWAV } from "./audio.js";
 import { splitTextIntoChunks, joinPcm } from "./text-chunking.js";
 
