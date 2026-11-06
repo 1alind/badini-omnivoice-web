@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@huggingface/tokenizers": "0.2.0",
-    "onnxruntime-web": "1.21.0"
+    "onnxruntime-web": "1.31.1"
   },
   "devDependencies": {
-    "vite": "6.4.1"
+    "vite": "8.3.6"
   }
 }
