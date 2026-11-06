@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getTimeSteps, computeSchedule, logSoftmax1D, topkFlatIndices } from "../src/math-utils.js";
 import { estimateDuration } from "../src/duration.js";
+import { splitTextIntoChunks, joinPcm } from "../src/text-chunking.js";
 
 test("time schedule starts at zero and ends at one", () => {
   const steps = getTimeSteps(0, 1, 32, 0.1);
@@ -30,4 +31,17 @@ test("top-k returns highest score indices", () => {
 test("duration estimator preserves reference length for identical text", () => {
   assert.equal(estimateDuration("دەقێ کوردی", "دەقێ کوردی", 42), 47);
   assert.equal(estimateDuration("Same text", "Same text", 50), 50);
+});
+
+test("long text is split without exceeding the per-chunk frame budget", () => {
+  const text = "This is a long sentence that should be split into several small chunks, because we need keep every part within a modest token budget.";
+  const chunks = splitTextIntoChunks(text, "hello there", 80, 120);
+  assert.ok(chunks.length > 1);
+  assert.equal(chunks.join(" "), text);
+  assert.ok(chunks.every(chunk => estimateDuration(chunk, "hello there", 80) <= 120));
+});
+
+test("PCM chunks are joined with the requested silence gap", () => {
+  const joined = joinPcm([new Float32Array([1, 2]), new Float32Array([3])], 10, 0.2);
+  assert.deepEqual([...joined], [1, 2, 0, 0, 3]);
 });
