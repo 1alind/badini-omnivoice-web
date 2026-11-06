@@ -22,7 +22,7 @@ Default checkpoint: `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The no
 - `audio_encoder.onnx` and `audio_decoder.onnx`
 - tokenizer JSON files
 - model manifest
-- Hayfa reference WAV and exact transcript
+- speaker/emotion reference WAVs and exact transcripts
 
 Download the ZIP, extract it in the iPad Files app, and keep the extracted folder. The ZIP can be large. Do not upload model weights to this GitHub repository.
 
