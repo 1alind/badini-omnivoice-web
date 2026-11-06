@@ -62,7 +62,7 @@ npm run build
 npm run preview
 ```
 
-The build copies ONNX Runtime Web WASM assets locally and generates a service worker precache list. No runtime CDN is used.
+The build copies ONNX Runtime Web WASM assets locally and generates a service worker precache list. `vercel.json` sets COOP/COEP/CORP headers from the first request so the browser can enable cross-origin isolation and WASM threading where supported. No runtime CDN is used.
 
 ## Browser and device notes
 
