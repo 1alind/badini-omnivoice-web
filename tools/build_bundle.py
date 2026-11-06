@@ -28,14 +28,16 @@ def external_files(graph):
             locations.update(item.value for item in tensor.external_data if item.key == "location")
     return [{"path": name, "localPath": name} for name in sorted(locations)]
 
-def encode_prompts(codec, repo, revision, out):
+def encode_prompts(codec, model_repo, model_revision, reference_repo, reference_revision, out):
     prompts = []
     sr_target = int(getattr(codec.config, "sampling_rate", 24000) or 24000)
     hop = int(codec.config.hop_length)
     for voice, emotion, stem in PROMPTS:
         try:
-            wav = hf_hub_download(repo, stem + ".wav", revision=revision)
-            txt = hf_hub_download(repo, stem + ".txt", revision=revision)
+            prompt_repo = model_repo if (voice == "hayfa" and emotion == "natural") else reference_repo
+            prompt_revision = model_revision if prompt_repo == model_repo else reference_revision
+            wav = hf_hub_download(prompt_repo, stem + ".wav", revision=prompt_revision)
+            txt = hf_hub_download(prompt_repo, stem + ".txt", revision=prompt_revision)
             audio, sr = torchaudio.load(wav)
             if audio.shape[0] > 1: audio = audio.mean(dim=0, keepdim=True)
             if sr != sr_target: audio = torchaudio.functional.resample(audio, sr, sr_target)
@@ -64,7 +66,7 @@ def encode_prompts(codec, repo, revision, out):
             arr.tofile(out / token_file)
             text_file = stem + ".txt"
             shutil.copy2(txt, out / text_file)
-            prompts.append({"voice":voice,"emotion":emotion,"audio_tokens":token_file,"frames":int(arr.shape[-1]),"codebooks":int(arr.shape[0]),"rms":float(rms),"text":text_file})
+            prompts.append({"voice":voice,"emotion":emotion,"audio_tokens":token_file,"frames":int(arr.shape[-1]),"codebooks":int(arr.shape[0]),"rms":float(rms),"text":text_file,"source_repo":prompt_repo})
             print(f"Encoded {voice}/{emotion}: {arr.shape[-1]} frames")
         except Exception as exc:
             print(f"WARNING {stem}: {exc}")
@@ -95,7 +97,7 @@ def main():
         shutil.copy2(higgs / "LICENSE", out / "HIGGS_AUDIO_LICENSE.txt")
     codec=HiggsAudioV2TokenizerModel.from_pretrained(str(higgs),dtype=torch.float32)
     codec.eval()
-    prompts,sample_rate,hop=encode_prompts(codec,a.reference_repo,reference_revision,out)
+    prompts,sample_rate,hop=encode_prompts(codec,a.model_id,voice_revision,a.reference_repo,reference_revision,out)
     del codec
     for name in ("tokenizer.json","tokenizer_config.json"):
         if not (out/name).is_file(): raise RuntimeError(f"Missing {name}")
