@@ -1,5 +1,12 @@
+node_modules/
+dist/
 models/*
 !models/README.md
-vendor/*
-!vendor/README.md
+public/vendor/ort/*
+!public/vendor/ort/.gitkeep
+*.onnx
+*.onnx.data
+*.safetensors
+*.wav
+*.zip
 .DS_Store
