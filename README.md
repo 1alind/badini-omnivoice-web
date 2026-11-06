@@ -44,7 +44,7 @@ No GitHub Pages setup or GitHub Actions deployment workflow is required. Vercel 
 The model checkpoint is large. Use a Google Colab **High-RAM** runtime if available. The exporter uses CPU PyTorch and may take a while.
 
 1. Open the [Colab export notebook](https://colab.research.google.com/github/1alind/badini-omnivoice-web/blob/main/notebooks/export_badini_omnivoice.ipynb).
-2. Run the notebook cells. It downloads the Badini fine-tuned checkpoint, exports the four ONNX graphs, pre-encodes the reference prompts, converts the LLM to INT8, and validates the bundle against the FP32 reference.
+2. Run the notebook cells. Its preflight checks the requested Hugging Face repository, resolves any renamed-repository redirect to the canonical ID, and verifies the required checkpoint files before the large download. It then exports the four ONNX graphs, pre-encodes the reference prompts, converts the LLM to INT8, and validates the bundle against the FP32 reference.
 3. Download `badini-omnivoice-model.zip` when the notebook finishes.
 4. Extract the ZIP in the iPad Files app.
 5. Open your Vercel deployment, select all extracted files, and import them.
