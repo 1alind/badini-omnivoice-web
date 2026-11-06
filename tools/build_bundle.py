@@ -41,6 +41,20 @@ def encode_prompts(codec, repo, revision, out):
             if sr != sr_target: audio = torchaudio.functional.resample(audio, sr, sr_target)
             rms = torch.sqrt(torch.mean(audio.square())).item()
             if 0 < rms < 0.1: audio = audio * (0.1 / rms)
+            # Match OmniVoice prompt preprocessing: retain speech plus 100 ms lead / 200 ms tail.
+            window = max(1, int(sr_target * 0.01))
+            active = []
+            threshold = 10 ** (-50 / 20)
+            for start in range(0, audio.shape[-1], window):
+                segment = audio[..., start:min(audio.shape[-1], start + window)]
+                if torch.sqrt(torch.mean(segment.square())).item() > threshold:
+                    active.append(start)
+            if active:
+                first = active[0]
+                last = min(audio.shape[-1], active[-1] + window)
+                left = max(0, first - int(sr_target * 0.1))
+                right = min(audio.shape[-1], last + int(sr_target * 0.2))
+                audio = audio[..., left:right]
             remainder = audio.shape[-1] % hop
             if remainder: audio = audio[..., :-remainder]
             if audio.numel() == 0: raise RuntimeError("empty after codec-hop alignment")
