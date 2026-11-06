@@ -6,9 +6,9 @@ An offline-first browser app for Badini Kurdish text-to-speech using the Badini 
 
 The browser app is intended to run the Badini fine-tuned weights, not the original unmodified `k2-fsa/OmniVoice` weights. The current exporter and Colab notebook target:
 
-`Dezheen89/omnivoice-badini`
+`Dezheen89/omnivoice`
 
-The model implementation/export code follows OmniVoice's architecture because that is the architecture the fine-tuned checkpoint uses. The weights loaded for conversion must remain the Badini fine-tuned checkpoint.
+The checkpoint repository is the canonical `Dezheen89/omnivoice` URL. The exporter reads its exact `model.safetensors`, config and tokenizer. The ONNX export code reproduces the checkpoint architecture; it must not substitute weights from `k2-fsa/OmniVoice`.
 
 ## What runs in the browser
 
