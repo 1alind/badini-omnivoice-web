@@ -103,7 +103,7 @@ def main():
       "audioEmbeddings":{"model":"audio_embeddings_encoder.onnx","externalData":external_files(out/"audio_embeddings_encoder.onnx")},
       "llm":{"model":"llm_decoder.onnx","externalData":external_files(out/"llm_decoder.onnx")},
       "audioHeads":{"model":"audio_heads_decoder.onnx","externalData":external_files(out/"audio_heads_decoder.onnx")},
-      "higgsDecoder":{"model":"higgs_decoder.onnx","externalData":external_files(out/"higgs_decoder.onnx")},
+      "higgsDecoder":{"model":"higgs_decoder.onnx","externalData":external_files(out/"higgs_decoder.onnx"),"executionProvider":"wasm"},
     }
     manifest={
       "model_id":a.model_id,"language":"kmr","sample_rate":sample_rate,"audio_hop_length":hop,"source_revisions":{"voice":voice_revision,"higgs":higgs_revision,"references":reference_revision},
