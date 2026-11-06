@@ -240,7 +240,7 @@ export class OmniVoiceEngine {
       if (positionTemperature > 0) {
         for (let i = 0; i < scores.length; i++) {
           const u = Math.random();
-          scores[i] += -Math.log(-Math.log(u + 1e-10) + 1e-10) / positionTemperature;
+          scores[i] = scores[i] / positionTemperature - Math.log(-Math.log(u + 1e-10) + 1e-10);
         }
       }
       for (let i = 0; i < scores.length; i++) if (tokens[i] !== MASK_ID) scores[i] = -Infinity;
