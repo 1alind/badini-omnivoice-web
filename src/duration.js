@@ -10,10 +10,12 @@ function weightOf(char) {
   return WEIGHT.other;
 }
 export function estimateDuration(text, refText, refFrames) {
-  const reference = [...(refText || "")].reduce((s, c) => s + weightOf(c), 0);
+  const referenceText = refText || "Nice to meet you.";
+  const referenceFrames = refFrames || 25;
+  const reference = [...referenceText].reduce((s, c) => s + weightOf(c), 0);
   const target = [...(text || "")].reduce((s, c) => s + weightOf(c), 0);
-  if (!reference || !refFrames) return Math.max(40, Math.ceil(target * 1.1));
-  const estimate = target * refFrames / reference;
+  if (!reference) return 1;
+  const estimate = target * referenceFrames / reference;
   const adjusted = estimate < 50 ? 50 * Math.pow(estimate / 50, 1 / 3) : estimate;
   return Math.max(1, Math.floor(adjusted));
 }
