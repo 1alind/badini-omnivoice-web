@@ -1,6 +1,6 @@
 import { Tokenizer } from "@huggingface/tokenizers";
 import * as ort from "onnxruntime-web/webgpu";
-import { buildOmniVoiceAttentionMask, createPythonRandom, generateOmniVoiceCodes, prepareOmniVoiceInputs } from "./omnivoice-generation.js";
+import { buildOmniVoiceAttentionMask, createPythonRandom, generateOmniVoiceCodes, prepareOmniVoiceInputs } from "./omnivoice-generation-v2.js";
 
 function halfToFloat(value) {
   const sign = (value & 0x8000) ? -1 : 1;
@@ -176,29 +176,38 @@ export class OmniVoiceEngine {
   }
 
   async #runBackboneStep({ inputIds, audioMask, attentionMask, attentionMaskType = "bool", attentionMaskShape, batch, codebooks, sequenceLength }) {
-    const embeddingsResult = await this.sessions.audioEmbeddings.run({
-      input_ids: new ort.Tensor("int64", inputIds, [batch, codebooks, sequenceLength]),
-      audio_mask: new ort.Tensor("bool", audioMask, [batch, sequenceLength]),
-    });
-    const embeddings = embeddingsResult.inputs_embeds;
-    const llmResult = await this.sessions.llm.run({
-      inputs_embeds: new ort.Tensor("float32", tensorToFloat32(embeddings), [batch, sequenceLength, this.runtime.hiddenSize]),
-      attention_mask: new ort.Tensor(attentionMaskType, attentionMask, attentionMaskShape ?? [batch, 1, sequenceLength, sequenceLength]),
-    });
-    const headsResult = await this.sessions.audioHeads.run({
-      hidden_states: new ort.Tensor("float32", tensorToFloat32(llmResult.hidden_states), [batch, sequenceLength, this.runtime.hiddenSize]),
-    });
-    return tensorToFloat32(headsResult.logits);
+    const embIds = new ort.Tensor("int64", inputIds, [batch, codebooks, sequenceLength]);
+    const embMask = new ort.Tensor("bool", audioMask, [batch, sequenceLength]);
+    let embeddingsResult;
+    let llmResult;
+    let headsResult;
+    let embedsTensor;
+    let attentionTensor;
+    let hiddenTensor;
+    try {
+      embeddingsResult = await this.sessions.audioEmbeddings.run({ input_ids: embIds, audio_mask: embMask });
+      embedsTensor = new ort.Tensor("float32", tensorToFloat32(embeddingsResult.inputs_embeds), [batch, sequenceLength, this.runtime.hiddenSize]);
+      attentionTensor = new ort.Tensor(attentionMaskType, attentionMask, attentionMaskShape ?? [batch, 1, sequenceLength, sequenceLength]);
+      llmResult = await this.sessions.llm.run({ inputs_embeds: embedsTensor, attention_mask: attentionTensor });
+      hiddenTensor = new ort.Tensor("float32", tensorToFloat32(llmResult.hidden_states), [batch, sequenceLength, this.runtime.hiddenSize]);
+      headsResult = await this.sessions.audioHeads.run({ hidden_states: hiddenTensor });
+      return tensorToFloat32(headsResult.logits);
+    } finally {
+      embIds.dispose?.(); embMask.dispose?.(); embedsTensor?.dispose?.(); attentionTensor?.dispose?.(); hiddenTensor?.dispose?.();
+      embeddingsResult?.inputs_embeds?.dispose?.(); llmResult?.hidden_states?.dispose?.(); headsResult?.logits?.dispose?.();
+    }
   }
   async #decode(tokens, codebooks, targetLength) {
     const decoderInputName = this.runtime.decoderInputName || "codes";
     const decoderOutputName = this.runtime.decoderOutputName || "waveform_24k";
-    const result = await this.sessions.higgsDecoder.run({
-      [decoderInputName]: new this.ort.Tensor("int64", tokens, [codebooks, 1, targetLength]),
-    });
+    const input = new this.ort.Tensor("int64", tokens, [codebooks, 1, targetLength]);
+    const result = await this.sessions.higgsDecoder.run({ [decoderInputName]: input });
+    input.dispose?.();
     const waveform = result[decoderOutputName];
     if (!waveform) throw new Error(`Higgs decoder output not found: ${decoderOutputName}`);
-    return tensorToFloat32(waveform);
+    const pcm = tensorToFloat32(waveform);
+    waveform.dispose?.();
+    return pcm;
   }
 
   async dispose() {
