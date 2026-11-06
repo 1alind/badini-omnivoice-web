@@ -26,7 +26,7 @@ export class OmniVoiceEngine {
     };
 
     // Keep every runtime asset on this same static origin. No CDN is used.
-    ort.env.wasm.wasmPaths = new URL("../vendor/ort/", import.meta.url).href;
+    ort.env.wasm.wasmPaths = new URL("./vendor/ort/", document.baseURI).href;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1)) : 1;
 
     this.backend = navigator.gpu ? "webgpu" : "wasm";
@@ -102,7 +102,7 @@ export class OmniVoiceEngine {
     const denoise = refCodes ? "<|denoise|>" : "";
     const style = this._tokens(`${denoise}<|lang_start|>${language}<|lang_end|><|instruct_start|>None<|instruct_end|>`);
     let fullText = refText ? `${refText.trim()} ${text.trim()}` : text.trim();
-    fullText = fullText.replace(/[ \\t]*\\r?\\n[\\s]*/g, ".");
+    fullText = fullText.replace(/[ \t]*\r?\n[\s]*/g, ".");
     const textTokens = this._tokens(`<|text_start|>${fullText}<|text_end|>`);
     const refFrames = refCodes ? refCodes.dims[2] : 0;
     const seq = style.length + textTokens.length + refFrames + targetFrames;
