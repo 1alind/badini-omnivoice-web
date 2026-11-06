@@ -10,3 +10,10 @@ public/vendor/ort/*
 *.wav
 *.zip
 .DS_Store
+badini-model-bundle/
+badini-export-work/
+*.i32
+*.npy
+*.npz
+*.pt
+*.pth
