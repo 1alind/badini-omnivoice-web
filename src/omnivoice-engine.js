@@ -284,10 +284,11 @@ function buildSessionPlans(manifest, webGpuAvailable) {
     return [{ label: "wasm", defaultBackend: "wasm", backends: {} }];
   }
 
-  const isMobileInt8 = manifest.runtimeSource?.qualityProfile === "mobile-int8-weight-only"
-    || manifest.conversion?.targetProfile === "mobile-int8-weight-only";
-  const isMobileInt4 = manifest.runtimeSource?.qualityProfile === "mobile-int4-weight-only"
-    || manifest.conversion?.targetProfile === "mobile-int4-weight-only";
+  const profile = manifest.runtime?.qualityProfile
+    || manifest.runtimeSource?.qualityProfile
+    || manifest.conversion?.targetProfile;
+  const isMobileInt8 = profile === "mobile-int8-weight-only";
+  const isMobileInt4 = profile === "mobile-int4-weight-only";
   if (isMobileInt8 || isMobileInt4) {
     return [
       {
