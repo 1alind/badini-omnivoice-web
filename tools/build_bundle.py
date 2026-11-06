@@ -75,7 +75,7 @@ def encode_prompts(codec, model_repo, model_revision, reference_repo, reference_
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("--model-id",default="Dezheen89/omnivoice-badini")
+    p.add_argument("--model-id",default="Dezheen89/omnivoice")
     p.add_argument("--higgs-repo",default="k2-fsa/OmniVoice")
     p.add_argument("--reference-repo",default="Dezheen89/cosyvoice")
     p.add_argument("--out",default="./badini-model-bundle")
