@@ -213,6 +213,6 @@ $("generateBtn").addEventListener("click", async () => {
     $("modelStatusText").textContent = "This browser could not open IndexedDB: " + error.message;
   }
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    navigator.serviceWorker.register(new URL("../sw.js", import.meta.url), { scope: new URL("../", import.meta.url).pathname }).catch(() => {});
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 })();
