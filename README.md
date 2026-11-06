@@ -1,68 +1,72 @@
-# Badini Voice · Browser-local OmniVoice
+# Badini Voice
 
-A static, offline-first web app for generating Badini Kurdish speech using the [Dezheen89/omnivoice-badini](https://huggingface.co/Dezheen89/omnivoice-badini) fine-tune. Voice prompt samples come from [Dezheen89/cosyvoice](https://huggingface.co/Dezheen89/cosyvoice).
+An offline-first browser app for Badini Kurdish text-to-speech using the fine-tuned [Dezheen89/omnivoice-badini](https://huggingface.co/Dezheen89/omnivoice-badini) checkpoint.
 
-## What it does
+## What runs in the browser
 
-- Imports ONNX model files from the user's device.
-- Stores them in browser IndexedDB when quota permits, with a current-tab memory fallback.
-- Runs the OmniVoice inference loop in JavaScript with ONNX Runtime Web.
-- Uses Hayfa, Abdullah, and Bafreen reference audio samples (including available emotion samples), or a user-provided reference recording.
-- Exports generated speech as 24 kHz mono WAV.
-- Caches the static app/runtime locally so it can be reopened offline after the first visit.
+The app uses four split ONNX graphs:
 
-**No inference server, inference API, analytics, or CDN is used by the app.** The static page must be downloaded once from its host. A cloud notebook is used only for one-time model conversion and reference-prompt encoding; it is not involved in speech generation. After the app and model bundle have been imported, generation is local.
+- `audio_embeddings_encoder.onnx`
+- `llm_decoder.onnx`
+- `audio_heads_decoder.onnx`
+- `higgs_decoder.onnx`
 
-## 1. Export the model bundle
+The one-time bundle builder exports the fine-tuned backbone in FP32, splits large external weight files into browser-importable parts, and pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files. Safari does not need to upload or encode reference audio during generation.
 
-Open the [Colab export notebook](https://colab.research.google.com/github/1alind/badini-omnivoice-web/blob/main/notebooks/export_badini_omnivoice.ipynb) and run its cells.
+The browser runtime uses ONNX Runtime Web. It attempts WebGPU for the backbone graphs when available, runs the Higgs decoder through WASM, and falls back to all-WASM if the mixed path cannot initialize. Long text is split into shorter generation chunks to keep the per-run token budget bounded on iPad.
 
-Default checkpoint: `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The notebook exports the exact fine-tuned checkpoint into four split ONNX graphs, uses the Higgs codec to pre-encode the Badini speaker reference clips, then applies validated INT8 weight-only quantization to the LLM MatMul weights. Audio embeddings, audio heads and the Higgs decoder remain FP32. It downloads small reference WAV/TXT pairs from `Dezheen89/cosyvoice`; these are prompt recordings only, not CosyVoice model weights. The ZIP contains:
-- `audio_embeddings_encoder.onnx` and external weight data (FP32)
-- `llm_decoder.onnx` and external weight data (mobile INT8 MatMulNBits)
-- `audio_heads_decoder.onnx` and external weight data (FP32)
-- `higgs_decoder.onnx` and external weight data (FP32, WASM execution)
-- tokenizer JSON files and `manifest.json`
-- pre-encoded speaker prompt token files (`.i32`) and exact transcripts
+## No inference server
 
-The notebook runs `tools/validate_bundle.py` before zipping, checking all four ONNX graph contracts, non-causal attention, tokenizer files, external weight sidecars, and pre-encoded prompt dimensions.
+- No Python backend, inference API, cloud GPU, analytics, telemetry, or CDN calls during speech generation.
+- The static app and runtime assets are downloaded from the host once and precached by the service worker.
+- The model bundle is imported into browser storage. IndexedDB is used when available; otherwise files remain in memory for the current tab.
+- After the app and model bundle are cached, speech generation is designed to work offline.
 
-Download the ZIP, extract it in the iPad Files app, and keep the extracted folder. The ZIP can be large. Do not upload model weights to this GitHub repository.
+A hosted static page still needs an initial connection to download the app. The Colab notebook below is used only for one-time model conversion, not for inference.
 
-## 2. Build / host the static app
+## Build the model bundle once
 
-The GitHub Actions workflow builds the static site on each push. To enable hosting:
-1. Open this repository's **Settings → Pages**.
-2. Set the build and deployment source to **GitHub Actions**.
-3. Open `https://1alind.github.io/badini-omnivoice-web/` after the deployment workflow succeeds.
+The model checkpoint is large. Use a Google Colab **High-RAM** runtime if available. The exporter uses CPU PyTorch and may take a while.
 
-Alternatively, run `npm install` then `npm run build` and host the `dist/` folder on any static host. The ONNX Runtime WASM files are copied into the build locally. No CDN runtime dependency is used.
+1. Open the [Colab export notebook](https://colab.research.google.com/github/1alind/badini-omnivoice-web/blob/main/notebooks/export_badini_omnivoice.ipynb).
+2. Run the notebook cells. It downloads the exact fine-tuned checkpoint, exports and validates the four ONNX graphs, and pre-encodes the reference prompts.
+3. Download `badini-omnivoice-model.zip` when the notebook finishes.
+4. Extract the ZIP in the iPad Files app.
+5. Open the [Badini Voice app](https://1alind.github.io/badini-omnivoice-web/) after GitHub Pages is enabled, select all extracted files, and import them.
 
-## 3. First-time setup on iPad
+The ZIP can be several gigabytes. Do not commit model weights or generated prompt-token files to this GitHub repository.
 
-1. Open the Pages URL in Safari.
-2. Add it to the Home Screen if you want an app-like launch.
-3. In Badini Voice, select all extracted model files together.
-4. Tap **Load model on this iPad**.
-5. Wait for the model to load, then enter Badini text and generate.
+## Run locally
 
-The app tries to store imported model files in IndexedDB. If Safari's storage quota rejects the large bundle, the files remain usable in the current tab only. Keep Safari open during loading and generation; after a tab-only import, you must select the files again after closing or reloading.
+Requirements: Node.js 22 or newer.
 
-## Browser limitations
+```bash
+npm install
+npm test
+npm run build
+npm run preview
+```
 
-- ONNX Runtime Web's current compatibility table lists WASM CPU for Safari on iOS, but still marks its WebGPU execution provider unsupported there. Safari 26 itself has begun exposing the WebGPU API on iOS. The app probes for it and attempts WebGPU, then falls back to WASM if ONNX Runtime or a required operator is unsupported.
-- This model is about 0.6B parameters. FP16 export is the default to reduce file size, but memory use and generation speed still need real-device validation on the target iPad.
-- The browser runtime follows OmniVoice's four-graph pipeline and rank-4 Boolean non-causal attention contract. The reference audio is pre-encoded during the one-time Colab build, so no audio encoder or server is needed in Safari. The mobile INT8 LLM runs through WASM; the Higgs decoder is also pinned to WASM. It still must be compared against the Python reference output before treating generated speech as fully validated.
-- The first export notebook uses a cloud notebook only for conversion. It is not used for speech generation.
+The build copies the pinned ONNX Runtime Web WASM assets locally and generates a service worker precache list. No runtime CDN is used.
 
-## Project status
+## Enable GitHub Pages
 
-The UI, local file import, IndexedDB storage, static runtime bundling, ONNX export script, Colab notebook, and browser inference engine are now in the repository. Remaining validation:
-1. Run the Colab export against the exact checkpoint, encode the speaker prompts and validate the mobile INT8 graph.
-2. Confirm the app bundle builds and passes its browser-side unit tests.
-3. Load the exported bundle in Safari on the M2 iPad.
-4. Compare generated Badini WAV output with the Python model's output and fix any numerical or text-preprocessing differences.
+In the repository, open **Settings → Pages**, choose **GitHub Actions** as the build and deployment source, and save. The workflow builds the static app and deploys it to:
 
-## Licenses
+`https://1alind.github.io/badini-omnivoice-web/`
 
-The original project files are MIT licensed. The adapted OmniVoice browser inference components include Apache-2.0-licensed upstream code; see `NOTICE` and `LICENSE-APACHE-2.0`. The model weights and Higgs Audio V2 tokenizer are separate assets with separate license terms. Bundled ONNX Runtime Web and Hugging Face Tokenizers notices are listed in `THIRD_PARTY_NOTICES.md`. Check model and tokenizer licenses before redistributing model bundles.
+## Browser and device notes
+
+The target is Safari on the M2 iPad Pro. WebGPU support in iOS Safari and ONNX Runtime's operator coverage must be confirmed on the actual device. The app falls back to WASM CPU if WebGPU initialization fails. Generation speed and peak memory use still need a real iPad test with the exported bundle.
+
+## Licensing
+
+- Original project files: MIT, see `LICENSE`.
+- Adapted legacy OmniVoice Web components: Apache-2.0, see `LICENSE-APACHE-2.0`.
+- Adapted FP32 exporter: MIT, see `LICENSE-TSUKUYOMICHAN-MIT`.
+- Bundled ONNX Runtime Web and Hugging Face Tokenizers: see `THIRD_PARTY_NOTICES.md`.
+- Model weights and Higgs Audio V2 tokenizer assets have separate upstream license terms. Review them before redistributing a model bundle.
+
+## Current status
+
+The static app, split-graph browser runtime, bundle exporter, validator, chunking, and CI checks are in the repository. The project is **not end-to-end verified yet**: the model bundle still needs to be generated in Colab and tested on the iPad.
