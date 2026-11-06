@@ -1,7 +1,7 @@
 # Adapted from DaisukeDaisuke/tsukuyomichan-omnivoice-onnx/scripts/export_fp32.py
 # Copyright and license notices are retained in NOTICE; see upstream MIT license.
 #!/usr/bin/env python3
-"""Export the exact Dezheen89/omnivoice fine-tuned checkpoint without quantization.
+"""Export the exact Dezheen89/omnivoice-badini fine-tuned checkpoint without quantization.
 
 The source checkpoint is loaded from the selected Hugging Face repository path.
 The release directory receives split ONNX runtime graphs and metadata, never
@@ -346,7 +346,7 @@ def save_backbone(source_dir: Path, work: Path, release: Path) -> None:
         attn_implementation="eager",
     )
     model.eval()
-    assert_fp32_module(model, "Dezheen89/omnivoice fine-tuned checkpoint")
+    assert_fp32_module(model, "Dezheen89/omnivoice-badini fine-tuned checkpoint")
 
     # Preserve runtime tokenizer/config from the exact voice checkpoint.
     for name in ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja"):
