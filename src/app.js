@@ -8,6 +8,8 @@ const REQUIRED = ["omnivoice_lm.onnx", "audio_encoder.onnx", "audio_decoder.onnx
 
 let engine = null;
 let outputUrl = null;
+let loadedManifest = null;
+let loadedFiles = new Map();
 const volatileFiles = new Map();
 
 function openDB() {
@@ -83,6 +85,33 @@ function renderFiles(rows) {
   $("loadBtn").disabled = missing.length > 0;
 }
 
+function selectedPrompt() {
+  return (loadedManifest?.reference_prompts || []).find(prompt =>
+    prompt.voice === $("voiceSelect").value && prompt.emotion === $("emotionSelect").value
+  );
+}
+function refreshEmotionOptions() {
+  const prompts = loadedManifest?.reference_prompts || [];
+  const available = new Set(prompts.filter(p => p.voice === $("voiceSelect").value).map(p => p.emotion));
+  const select = $("emotionSelect");
+  for (const option of select.options) option.disabled = !available.has(option.value);
+  const active = [...select.options].find(option => !option.disabled);
+  if (select.selectedOptions[0]?.disabled && active) select.value = active.value;
+}
+async function applySelectedPrompt() {
+  const prompt = selectedPrompt();
+  $("refAudio").value = "";
+  if (!prompt) {
+    $("promptStatus").textContent = "CUSTOM PROMPT";
+    $("refText").value = "";
+    return;
+  }
+  $("promptStatus").textContent = `${prompt.voice.toUpperCase()} · ${prompt.emotion.toUpperCase()}`;
+  const transcript = loadedFiles.get(prompt.text);
+  $("refText").value = transcript ? (await transcript.text()).trim() : "";
+}
+
+
 $("textInput").addEventListener("input", () => {
   $("charCount").textContent = `${$("textInput").value.length} / 1200`;
   $("generateBtn").disabled = !engine || !$("textInput").value.trim();
@@ -91,6 +120,12 @@ $("textInput").addEventListener("input", () => {
 $("modelFiles").addEventListener("change", async event => {
   const selected = [...event.target.files];
   if (!selected.length) return;
+  engine?.dispose();
+  engine = null;
+  loadedManifest = null;
+  loadedFiles = new Map();
+  $("engineStatus").textContent = "ENGINE OFF";
+  $("generateBtn").disabled = true;
   for (const file of selected) volatileFiles.set(file.name, file);
   $("modelStatusText").textContent = "Importing model files…";
   try {
@@ -126,14 +161,15 @@ $("loadBtn").addEventListener("click", async () => {
       $("generationStatus").textContent = message;
       $("modelStatusText").textContent = message;
     });
+    loadedManifest = manifest;
+    loadedFiles = files;
+    refreshEmotionOptions();
+    await applySelectedPrompt();
     $("modelStatus").textContent = "LOADED";
     $("engineStatus").textContent = engine.backend.toUpperCase();
     $("generateBtn").disabled = !$("textInput").value.trim();
     $("generationStatus").textContent = `Ready. Inference backend: ${engine.backend.toUpperCase()}. The model runs locally on this device.`;
 
-    if (files.has("prompt-hayfa.txt")) {
-      $("refText").value = (await files.get("prompt-hayfa.txt").text()).trim();
-    }
   } catch (error) {
     engine?.dispose();
     engine = null;
@@ -152,6 +188,8 @@ $("loadBtn").addEventListener("click", async () => {
 $("clearBtn").addEventListener("click", async () => {
   engine?.dispose();
   engine = null;
+  loadedManifest = null;
+  loadedFiles = new Map();
   await removeFiles();
   volatileFiles.clear();
   renderFiles([]);
@@ -161,6 +199,21 @@ $("clearBtn").addEventListener("click", async () => {
   if (outputUrl) URL.revokeObjectURL(outputUrl);
   $("audioPlayer").hidden = true;
   $("downloadLink").hidden = true;
+});
+
+
+$("voiceSelect").addEventListener("change", async () => {
+  refreshEmotionOptions();
+  await applySelectedPrompt();
+});
+$("emotionSelect").addEventListener("change", applySelectedPrompt);
+$("refAudio").addEventListener("change", () => {
+  if ($("refAudio").files[0]) {
+    $("promptStatus").textContent = "CUSTOM AUDIO";
+    $("refText").value = "";
+  } else {
+    applySelectedPrompt();
+  }
 });
 
 $("generateBtn").addEventListener("click", async () => {
@@ -177,13 +230,18 @@ $("generateBtn").addEventListener("click", async () => {
   $("generationStatus").textContent = "Preparing the reference voice…";
 
   try {
-    const rows = await readFiles();
-    const files = new Map(rows.map(row => [row.name, row.blob]));
-    let referenceFile = $("refAudio").files[0] || files.get("prompt-hayfa.wav");
+    const customReference = $("refAudio").files[0];
+    const prompt = selectedPrompt();
+    let referenceFile = customReference;
     let referenceText = $("refText").value.trim();
-    if (!referenceText && files.has("prompt-hayfa.txt")) referenceText = (await files.get("prompt-hayfa.txt").text()).trim();
-    if (!referenceFile) throw new Error("No reference WAV found. Import the Hayfa prompt or choose a custom reference recording.");
-    if (!referenceText) throw new Error("The exact reference transcript is required. Add the matching text for the selected WAV.");
+    if (!customReference) {
+      if (!prompt) throw new Error("That speaker/emotion reference is not included. Choose another preset or upload your own WAV.");
+      referenceFile = loadedFiles.get(prompt.audio);
+      const transcriptFile = loadedFiles.get(prompt.text);
+      if (!referenceText && transcriptFile) referenceText = (await transcriptFile.text()).trim();
+    }
+    if (!referenceFile) throw new Error("Reference WAV is missing. Re-import the selected prompt files or choose a custom recording.");
+    if (!referenceText) throw new Error("The exact transcript for the selected reference WAV is required.");
 
     const refAudio = await decodeAudioFile(referenceFile);
     const started = performance.now();
