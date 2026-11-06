@@ -63,7 +63,7 @@ The target is Safari on the M2 iPad Pro. ONNX Runtime Web currently lists WebGPU
 
 - Original project files: MIT, see `LICENSE`.
 - Adapted OmniVoice browser runtime components: Apache-2.0, see `LICENSE-APACHE-2.0` and `NOTICE`.
-- Adapted FP32 exporter: MIT, see `LICENSE-TSUKUYOMICHAN-MIT`.
+- Adapted FP32 exporter and mobile INT8 quantizer: MIT, see `LICENSE-TSUKUYOMICHAN-MIT`.
 - Bundled ONNX Runtime Web and Hugging Face Tokenizers: see `THIRD_PARTY_NOTICES.md`.
 - Model code and model weights do not necessarily share the same license. The upstream OmniVoice card distinguishes code licensing from weight terms, and the Higgs Audio V2 tokenizer has a separate Boson community license. The export bundle now includes the upstream model cards and tokenizer license. Do not redistribute the bundle unless every applicable upstream term permits it.
 
