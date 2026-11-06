@@ -129,7 +129,7 @@ export class OmniVoiceEngine {
     return logits;
   }
 
-  async generate(text, { refAudio, refText, language = "kmr", steps = 32, guidance = 2, onStep = () => {} } = {}) {
+  async generate(text, { refAudio, refText, language = "kmr", steps = 32, guidance = 2, positionTemperature = 5, onStep = () => {} } = {}) {
     if (!this.lm || !this.tokenizer) throw new Error("Load the model files first.");
     if (!text.trim()) throw new Error("Enter some Badini text.");
     const refCodes = refAudio ? await this.encodeReference(refAudio) : null;
@@ -173,6 +173,10 @@ export class OmniVoiceEngine {
           predicted[index] = token;
           scores[index] = finalLogits[token] - c * 5;
         }
+      }
+      if (positionTemperature > 0) {
+        const randomized = gumbelSample(scores, positionTemperature);
+        scores.set(randomized);
       }
       for (let i = 0; i < scores.length; i++) if (tokens[i] !== MASK_ID) scores[i] = -Infinity;
       const chosen = topkFlatIndices(scores, schedule[step]);
