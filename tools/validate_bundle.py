@@ -90,6 +90,11 @@ def main():
         valid += 1
     if valid == 0:
         raise SystemExit("ERROR: no usable Badini speaker reference prompts")
+    available_voices = {prompt["voice"] for prompt in prompts}
+    if not {"hayfa", "abdullah", "bafreen"}.issubset(available_voices):
+        raise SystemExit("ERROR: reference prompts must include Hayfa, Abdullah and Bafreen")
+    if not any(prompt["voice"] == "hayfa" and prompt["emotion"] == "natural" for prompt in prompts):
+        raise SystemExit("ERROR: the default Hayfa natural prompt is missing")
     if runtime.get("llmAttention", {}).get("mode") != "omnivoice-noncausal":
         raise SystemExit("ERROR: manifest does not declare OmniVoice non-causal attention")
     quantization = manifest.get("quantization")
