@@ -272,7 +272,7 @@ $("generateBtn").addEventListener("click", async () => {
     $("generationStatus").textContent = error.message;
   } finally {
     $("progressWrap").hidden = true;
-    $("generateBtn").disabled = !engine;
+    $("generateBtn").disabled = !engine || !$("textInput").value.trim();
   }
 });
 
