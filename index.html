@@ -38,7 +38,7 @@
       <ul id="fileList" class="file-list"><li class="empty">No model files imported.</li></ul>
       <button id="loadBtn" class="primary" type="button" disabled>Load model on this iPad <span>↗</span></button>
       <p class="hint" id="modelStatusText">Model files are stored in this browser's local IndexedDB. They are not uploaded.</p>
-      <div class="model-note"><strong>Important:</strong> the model is large. Keep Safari open while loading. On iPad, the engine uses WASM CPU because iOS Safari does not currently expose ONNX Runtime WebGPU.</div>
+      <div class="model-note"><strong>Important:</strong> the model is large. Keep Safari open while loading. The app tries WebGPU when available; if ONNX Runtime cannot run the graphs there, it falls back to WASM CPU.</div>
       <button id="clearBtn" class="secondary" type="button">Clear stored model files</button>
     </section>
 
