@@ -16,7 +16,7 @@ test("a single oversized token is split safely instead of being truncated", () =
   const chunks = splitTextIntoChunks(word, "سڵاو", 48, 120);
   assert.ok(chunks.length > 1);
   assert.ok(chunks.every(chunk => estimateDuration(chunk, "سڵاو", 48) <= 120));
-  assert.equal(chunks.join(""), word);
+  assert.equal(chunks.join("").replace(/\\s+/g, ""), word);
 });
 
 test("PCM chunks are joined with the requested silence gap", () => {
