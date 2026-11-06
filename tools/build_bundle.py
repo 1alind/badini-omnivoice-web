@@ -75,7 +75,7 @@ def encode_prompts(codec, model_repo, model_revision, reference_repo, reference_
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("--model-id",default="Dezheen89/omnivoice")
+    p.add_argument("--model-id",default="Dezheen89/omnivoice-badini")
     p.add_argument("--higgs-repo",default="k2-fsa/OmniVoice")
     p.add_argument("--reference-repo",default="Dezheen89/cosyvoice")
     p.add_argument("--out",default="./badini-model-bundle")
@@ -84,9 +84,7 @@ def main():
     out=Path(a.out).resolve(); work=Path(a.work).resolve()
     out.mkdir(parents=True,exist_ok=True); work.mkdir(parents=True,exist_ok=True)
     voice_info = model_info(a.model_id)
-    # Hugging Face may redirect a renamed repository ID. Resolve the Hub's
-    # canonical ID once, then use it for metadata, snapshots and prompt files.
-    resolved_model_id = getattr(voice_info, "id", None) or a.model_id
+    resolved_model_id = a.model_id
     voice_revision = voice_info.sha
     higgs_revision = model_info(a.higgs_repo).sha
     reference_revision = model_info(a.reference_repo).sha
