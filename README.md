@@ -65,4 +65,4 @@ The UI, local file import, IndexedDB storage, static runtime bundling, ONNX expo
 
 ## Licenses
 
-The original project files are MIT licensed. The adapted OmniVoice browser inference components include Apache-2.0-licensed upstream code; see `NOTICE` and `LICENSE-APACHE-2.0`. The model weights and Higgs Audio V2 tokenizer are separate assets with separate license terms. Check those licenses before redistributing model bundles.
+The original project files are MIT licensed. The adapted OmniVoice browser inference components include Apache-2.0-licensed upstream code; see `NOTICE` and `LICENSE-APACHE-2.0`. The model weights and Higgs Audio V2 tokenizer are separate assets with separate license terms. Bundled ONNX Runtime Web and Hugging Face Tokenizers notices are listed in `THIRD_PARTY_NOTICES.md`. Check model and tokenizer licenses before redistributing model bundles.
