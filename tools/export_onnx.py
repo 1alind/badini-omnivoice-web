@@ -83,7 +83,9 @@ def main():
 
     out = Path(args.output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    device = "cuda:0" if args.device == "cuda" and torch.cuda.is_available() else "cpu"
+    if args.device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA GPU not found. In Colab, choose Runtime → Change runtime type → T4 GPU.")
+    device = "cuda:0" if args.device == "cuda" else "cpu"
     dtype = torch.float16 if args.dtype == "fp16" and device.startswith("cuda") else torch.float32
 
     from omnivoice.models.omnivoice import OmniVoice
