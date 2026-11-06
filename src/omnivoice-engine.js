@@ -1,3 +1,8 @@
+/*
+ * Adapted from OmniVoice Web, Copyright 2026 Xiaomi Corp. (author: Han Zhu).
+ * Modified for the Badini Voice browser-local inference project.
+ * See NOTICE and LICENSE-APACHE-2.0.
+ */
 import * as ort from "onnxruntime-web/webgpu";
 import { Tokenizer } from "@huggingface/tokenizers";
 import { estimateDuration } from "./duration.js";
