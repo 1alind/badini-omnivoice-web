@@ -33,7 +33,7 @@ Download the ZIP, extract it in the iPad Files app, and keep the extracted folde
 The GitHub Actions workflow builds the static site on each push. To enable hosting:
 1. Open this repository's **Settings → Pages**.
 2. Set the build and deployment source to **GitHub Actions**.
-3. Open the Pages URL after the workflow succeeds.
+3. Open `https://1alind.github.io/badini-omnivoice-web/` after the deployment workflow succeeds.
 
 Alternatively, run `npm install` then `npm run build` and host the `dist/` folder on any static host. The ONNX Runtime WASM files are copied into the build locally. No CDN runtime dependency is used.
 
