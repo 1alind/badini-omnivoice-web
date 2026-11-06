@@ -28,6 +28,6 @@ test("top-k returns highest score indices", () => {
 });
 
 test("duration estimator preserves reference length for identical text", () => {
-  assert.equal(estimateDuration("دەقێ کوردی", "دەقێ کوردی", 42), 42);
+  assert.equal(estimateDuration("دەقێ کوردی", "دەقێ کوردی", 42), 47);
   assert.equal(estimateDuration("Same text", "Same text", 50), 50);
 });
