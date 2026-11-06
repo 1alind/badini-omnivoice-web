@@ -1,7 +1,7 @@
 import * as ort from "onnxruntime-web/webgpu";
 import { Tokenizer } from "@huggingface/tokenizers";
 import { estimateDuration } from "./duration.js";
-import { getTimeSteps, computeSchedule, logSoftmax1D, topkFlatIndices, gumbelSample, argmax1D } from "./math-utils.js";
+import { getTimeSteps, computeSchedule, logSoftmax1D, topkFlatIndices, argmax1D } from "./math-utils.js";
 
 const CODEBOOKS = 8;
 const AUDIO_VOCAB = 1025;
@@ -30,7 +30,6 @@ export class OmniVoiceEngine {
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1)) : 1;
 
     this.backend = navigator.gpu ? "webgpu" : "wasm";
-    const options = { executionProviders: [this.backend], graphOptimizationLevel: "all" };
     const manifest = files.has("manifest.json") ? JSON.parse(await files.get("manifest.json").text()) : {};
     const sidecarsFor = async graph => {
       const names = manifest.external_data?.[graph] || [];
@@ -75,7 +74,7 @@ export class OmniVoiceEngine {
   }
 
   _tokens(text) {
-    return this.tokenizer.encode(text, null, false).ids;
+    return this.tokenizer.encode(text).ids;
   }
 
   async encodeReference(waveform) {
