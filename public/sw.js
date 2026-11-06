@@ -3,7 +3,7 @@ self.addEventListener("install", event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
     const base = self.registration.scope;
-    await cache.addAll([base, base + "index.html", base + "styles.css", base + "manifest.webmanifest"]);
+    await cache.addAll([base, base + "index.html", base + "manifest.webmanifest", base + "icons/icon.svg"]);
     await self.skipWaiting();
   })());
 });
