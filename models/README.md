@@ -13,7 +13,7 @@ The browser app expects an ONNX export of the **fine-tuned** checkpoint `Dezheen
 - `manifest.json`
 - Pre-encoded voice/emotion token files (`.i32`) and exact transcripts listed in `manifest.json`
 
-The reference audio samples are downloaded from `Dezheen89/cosyvoice`, then encoded with the Higgs Audio V2 codec from `k2-fsa/OmniVoice`. The CosyVoice model weights are not included or used.
+Hayfa's natural reference sample is taken from the fine-tuned model repository itself. The additional voice/emotion reference samples are downloaded from `Dezheen89/cosyvoice`. All samples are encoded with the Higgs Audio V2 codec from `k2-fsa/OmniVoice`; the CosyVoice model weights are not included or used.
 
 Generate the bundle with `notebooks/export_badini_omnivoice.ipynb`. The notebook runs `tools/validate_bundle.py` before download. Select all extracted files together in the browser app.
 
