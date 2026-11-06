@@ -177,7 +177,7 @@ $("loadBtn").addEventListener("click", async () => {
     $("modelStatus").textContent = "LOADED";
     $("engineStatus").textContent = engine.backend.toUpperCase();
     $("generateBtn").disabled = !$("textInput").value.trim();
-    $("generationStatus").textContent = `Ready. Inference backend: ${engine.backend.toUpperCase()}. The model runs locally on this device.`;
+    $("generationStatus").textContent = `Ready. Backend: ${engine.backend.toUpperCase()}. WASM threads: ${engine.threadCount}. All speech generation runs locally.`;
 
   } catch (error) {
     await engine?.dispose();
