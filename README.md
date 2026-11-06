@@ -11,7 +11,7 @@ The app uses four split ONNX graphs:
 - `audio_heads_decoder.onnx`
 - `higgs_decoder.onnx`
 
-The one-time bundle builder exports the fine-tuned backbone in FP32, splits large external weight files into browser-importable parts, and pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files. Safari does not need to upload or encode reference audio during generation.
+The one-time bundle builder exports the fine-tuned backbone in FP32, splits large external weight files into browser-importable parts, and pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files. Hayfa's natural sample comes from the fine-tune itself; the additional voice/emotion samples come from `Dezheen89/cosyvoice`. Safari does not need to upload or encode reference audio during generation.
 
 The browser runtime uses ONNX Runtime Web. It attempts WebGPU for the backbone graphs when available, runs the Higgs decoder through WASM, and falls back to all-WASM if the mixed path cannot initialize. Long text is split into shorter generation chunks to keep the per-run token budget bounded on iPad.
 
