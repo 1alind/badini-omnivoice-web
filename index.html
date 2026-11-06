@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#10131c">
   <meta name="description" content="Offline, browser-local Badini Kurdish text-to-speech.">
+  <link rel="manifest" href="./manifest.webmanifest">
   <title>Badini Voice · Local TTS</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -12,41 +13,71 @@
   <main class="shell">
     <header class="top">
       <div class="brand-mark">ب</div>
-      <div><p class="eyebrow">LOCAL TEXT TO SPEECH</p><h1>Badini Voice</h1></div>
-      <span class="local-pill"><i></i> DEVICE ONLY</span>
+      <div><p class="eyebrow">ON-DEVICE TEXT TO SPEECH</p><h1>Badini Voice</h1></div>
+      <span class="local-pill"><i></i> LOCAL ENGINE</span>
     </header>
+
     <section class="intro">
       <p class="eyebrow">OMNIVOICE · BADINI KURDISH</p>
-      <h2>Your text.<br><span>Your device's voice.</span></h2>
-      <p class="sub">A browser-based TTS workspace designed to run locally, without an inference server or API.</p>
+      <h2>Your words.<br><span>Spoken locally.</span></h2>
+      <p class="sub">Speech is generated inside this browser. No inference server, cloud GPU, or API is used.</p>
     </section>
-    <section class="panel">
-      <div class="section-head"><div><p class="eyebrow">01 / TEXT</p><h3>What should it say?</h3></div><span class="counter" id="charCount">0 / 1200</span></div>
-      <textarea id="textInput" maxlength="1200" placeholder="دەقێ خۆ بنڤیسە...&#10;Write your Badini text here." dir="auto"></textarea>
-      <div class="controls">
-        <label class="field-label" for="voiceSelect">VOICE</label>
-        <select id="voiceSelect"><option value="hayfa">Hayfa</option><option value="abdullah">Abdullah</option><option value="bafreen">Bafreen</option></select>
-        <label class="field-label" for="emotionSelect">REFERENCE STYLE</label>
-        <select id="emotionSelect"><option value="natural">Natural (Hayfa only)</option><option value="happy">Happy</option><option value="sad">Sad</option><option value="angry">Angry</option><option value="fear">Fear</option><option value="surprise">Surprise</option></select>
-      </div>
-      <button id="generateBtn" class="primary" disabled>Generate speech <span>↗</span></button>
-      <p class="hint" id="generationStatus">The browser inference engine is not installed yet. Load the exported ONNX model bundle below.</p>
-    </section>
+
     <section class="panel model-panel">
-      <div class="section-head"><div><p class="eyebrow">02 / MODEL</p><h3>Local model files</h3></div><span class="status" id="modelStatus">NOT LOADED</span></div>
-      <p class="sub small">Choose the ONNX export files from your device. Files are kept in this browser's local storage. Nothing is uploaded.</p>
-      <label class="file-drop" for="modelFiles"><span class="upload-icon">＋</span><strong>Select model files</strong><span>ONNX, JSON and tokenizer files</span><input id="modelFiles" type="file" multiple></label>
-      <ul id="fileList" class="file-list"><li class="empty">No model files selected.</li></ul>
-      <div class="model-note"><strong>Expected export:</strong> OmniVoice backbone (embeddings encoder, LLM decoder, audio heads) plus the Higgs Audio V2 decoder and tokenizer assets.</div>
-      <button id="clearBtn" class="secondary" type="button">Clear locally stored model files</button>
+      <div class="section-head">
+        <div><p class="eyebrow">01 / MODEL</p><h3>Install model bundle</h3></div>
+        <span class="status" id="modelStatus">NOT LOADED</span>
+      </div>
+      <p class="sub small">First, export the Badini model using the included Colab notebook. Extract its ZIP in the Files app, then select all files here.</p>
+      <label class="file-drop" for="modelFiles">
+        <span class="upload-icon">＋</span>
+        <strong>Select exported model files</strong>
+        <span>ONNX graphs, weights, tokenizer, manifest and Hayfa prompt</span>
+        <input id="modelFiles" type="file" multiple>
+      </label>
+      <ul id="fileList" class="file-list"><li class="empty">No model files imported.</li></ul>
+      <button id="loadBtn" class="primary" type="button" disabled>Load model on this iPad <span>↗</span></button>
+      <p class="hint" id="modelStatusText">Model files are stored in this browser's local IndexedDB. They are not uploaded.</p>
+      <div class="model-note"><strong>Important:</strong> the model is large. Keep Safari open while loading. On iPad, the engine uses WASM CPU because iOS Safari does not currently expose ONNX Runtime WebGPU.</div>
+      <button id="clearBtn" class="secondary" type="button">Clear stored model files</button>
     </section>
+
+    <section class="panel">
+      <div class="section-head"><div><p class="eyebrow">02 / TEXT</p><h3>What should it say?</h3></div><span class="counter" id="charCount">0 / 1200</span></div>
+      <textarea id="textInput" maxlength="1200" placeholder="دەقێ خۆ بنڤیسە..." dir="auto"></textarea>
+      <div class="controls">
+        <label class="field-label" for="languageSelect">LANGUAGE</label>
+        <select id="languageSelect"><option value="kmr" selected>Badini Kurdish (kmr)</option></select>
+        <label class="field-label" for="stepsSelect">QUALITY / STEPS</label>
+        <select id="stepsSelect"><option value="32" selected>32 steps · Standard</option><option value="24">24 steps · Faster</option><option value="16">16 steps · Fastest</option></select>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head"><div><p class="eyebrow">03 / VOICE</p><h3>Reference voice</h3></div><span class="status">HAYFA</span></div>
+      <p class="sub small">The default bundle includes Hayfa's reference recording and its exact transcript. You can replace it with your own 24 kHz voice sample and transcript.</p>
+      <label class="field-label" for="refAudio">REFERENCE AUDIO (OPTIONAL)</label>
+      <input id="refAudio" type="file" accept="audio/*">
+      <label class="field-label" for="refText" style="margin-top:14px">EXACT REFERENCE TRANSCRIPT</label>
+      <textarea id="refText" rows="3" placeholder="Transcript of the reference audio..." dir="auto"></textarea>
+    </section>
+
+    <section class="panel">
+      <div class="section-head"><div><p class="eyebrow">04 / GENERATE</p><h3>Make speech</h3></div><span class="status" id="engineStatus">ENGINE OFF</span></div>
+      <button id="generateBtn" class="primary" disabled>Generate Badini speech <span>↗</span></button>
+      <div class="progress-wrap" id="progressWrap" hidden>
+        <p class="hint" id="progressText">Preparing…</p>
+        <progress id="progressBar" value="0" max="32"></progress>
+      </div>
+      <p class="hint" id="generationStatus">Import and load the model bundle to enable generation.</p>
+    </section>
+
     <section class="output panel">
-      <div class="section-head"><div><p class="eyebrow">03 / OUTPUT</p><h3>Generated audio</h3></div><span class="status" id="audioStatus">WAITING</span></div>
+      <div class="section-head"><div><p class="eyebrow">05 / OUTPUT</p><h3>Your audio</h3></div><span class="status" id="audioStatus">WAITING</span></div>
       <audio id="audioPlayer" controls hidden></audio>
       <a id="downloadLink" class="download" hidden download="badini-voice.wav">Download WAV ↗</a>
-      <p class="hint">Audio output will appear here when the model export and browser inference adapter are connected.</p>
     </section>
-    <footer><span>BADINI VOICE</span><span>NO BACKEND · NO TELEMETRY · LOCAL STORAGE</span></footer>
+    <footer><span>BADINI VOICE</span><span>NO INFERENCE SERVER · LOCAL MODEL · OFFLINE AFTER SETUP</span></footer>
   </main>
   <script type="module" src="./src/app.js"></script>
 </body>
