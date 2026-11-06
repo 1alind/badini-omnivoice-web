@@ -10,4 +10,5 @@ The adapted browser inference engine and sampling utilities are distributed unde
 The remaining original project files are provided under the MIT License in LICENSE.
 
 Model weights and Higgs Audio V2 tokenizer assets are separate works with separate license terms. Review the upstream model and tokenizer licenses before redistribution.
-\nReference audio/transcript assets are downloaded from Dezheen89/cosyvoice (Hugging Face model repository, Apache-2.0). They are included only as voice-cloning prompt samples and are not part of the OmniVoice model weights.\n
+
+Reference audio/transcript assets are downloaded from Dezheen89/cosyvoice (Hugging Face model repository, Apache-2.0). They are included only as voice-cloning prompt samples and are not part of the OmniVoice model weights.
