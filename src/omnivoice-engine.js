@@ -32,27 +32,40 @@ export class OmniVoiceEngine {
     this.backend = navigator.gpu ? "webgpu" : "wasm";
     const options = { executionProviders: [this.backend], graphOptimizationLevel: "all" };
     const manifest = files.has("manifest.json") ? JSON.parse(await files.get("manifest.json").text()) : {};
-    const externalData = [];
-    for (const name of (manifest.lm_external_data || [])) {
-      onProgress(`Reading weights: ${name}`);
-      externalData.push({ path: name, data: await get(name) });
-    }
-
-    try {
-      onProgress(`Loading OmniVoice backbone (${this.backend.toUpperCase()})…`);
-      this.lm = await ort.InferenceSession.create(await get("omnivoice_lm.onnx"), { ...options, externalData });
-    } catch (error) {
-      if (this.backend !== "webgpu") throw error;
-      onProgress("WebGPU failed. Retrying with local WASM CPU runtime…");
-      this.backend = "wasm";
+    const sidecarsFor = async graph => {
+      const names = manifest.external_data?.[graph] || [];
+      const assets = [];
+      for (const name of names) {
+        onProgress(`Reading weights: ${name}`);
+        assets.push({ path: name, data: await get(name) });
+      }
+      return assets;
+    };
+    const loadAll = async provider => {
+      const common = { executionProviders: [provider], graphOptimizationLevel: "all" };
       this.lm = await ort.InferenceSession.create(await get("omnivoice_lm.onnx"), {
-        executionProviders: ["wasm"], graphOptimizationLevel: "all", externalData
+        ...common, externalData: await sidecarsFor("omnivoice_lm.onnx")
       });
+      onProgress("Loading Higgs audio encoder…");
+      this.encoder = await ort.InferenceSession.create(await get("audio_encoder.onnx"), {
+        ...common, externalData: await sidecarsFor("audio_encoder.onnx")
+      });
+      onProgress("Loading Higgs audio decoder…");
+      this.decoder = await ort.InferenceSession.create(await get("audio_decoder.onnx"), {
+        ...common, externalData: await sidecarsFor("audio_decoder.onnx")
+      });
+    };
+    try {
+      onProgress(`Loading OmniVoice models (${this.backend.toUpperCase()})…`);
+      await loadAll(this.backend);
+    } catch (error) {
+      this.lm?.release(); this.encoder?.release(); this.decoder?.release();
+      this.lm = this.encoder = this.decoder = null;
+      if (this.backend !== "webgpu") throw error;
+      onProgress("WebGPU failed. Retrying all models with local WASM CPU runtime…");
+      this.backend = "wasm";
+      await loadAll("wasm");
     }
-    onProgress("Loading Higgs audio encoder…");
-    this.encoder = await ort.InferenceSession.create(await get("audio_encoder.onnx"), { executionProviders: [this.backend] });
-    onProgress("Loading Higgs audio decoder…");
-    this.decoder = await ort.InferenceSession.create(await get("audio_decoder.onnx"), { executionProviders: [this.backend] });
     onProgress("Loading local tokenizer…");
     const tokenizerJson = JSON.parse(await files.get("tokenizer.json").text());
     const tokenizerConfig = files.has("tokenizer_config.json") ? JSON.parse(await files.get("tokenizer_config.json").text()) : {};
@@ -86,8 +99,10 @@ export class OmniVoiceEngine {
   }
 
   _buildInput(text, targetFrames, refText, refCodes, language = "kmr") {
-    const style = this._tokens(`<|lang_start|>${language}<|lang_end|><|instruct_start|>None<|instruct_end|>`);
-    const fullText = refText ? `${refText.trim()} ${text.trim()}` : text.trim();
+    const denoise = refCodes ? "<|denoise|>" : "";
+    const style = this._tokens(`${denoise}<|lang_start|>${language}<|lang_end|><|instruct_start|>None<|instruct_end|>`);
+    let fullText = refText ? `${refText.trim()} ${text.trim()}` : text.trim();
+    fullText = fullText.replace(/[ \\t]*\\r?\\n[\\s]*/g, ".");
     const textTokens = this._tokens(`<|text_start|>${fullText}<|text_end|>`);
     const refFrames = refCodes ? refCodes.dims[2] : 0;
     const seq = style.length + textTokens.length + refFrames + targetFrames;
