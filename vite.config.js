@@ -5,7 +5,8 @@ export default defineConfig({
   build: {
     target: "es2022",
     outDir: "dist",
-    assetsInlineLimit: 0
+    assetsInlineLimit: 0,
+    manifest: true
   },
   server: {
     host: true
