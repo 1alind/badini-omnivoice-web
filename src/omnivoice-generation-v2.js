@@ -193,7 +193,8 @@ export async function prepareOmniVoiceInputs(text, tokenizer, config, options = 
   const refAudioTokens = options.refAudioTokens || null;
   const refFrames = refAudioTokens ? Math.floor(refAudioTokens.length / codebooks) : 0;
   if (refAudioTokens && refAudioTokens.length !== codebooks * refFrames) throw new Error("Reference audio token count does not match the model codebook count.");
-  const refText = (options.refText || "").trim();
+  const rawRefText = (options.refText || "").trim();
+  const refText = rawRefText && !/[.!?؟。！？]$/.test(rawRefText) ? rawRefText + "." : rawRefText;
   const language = options.language ?? "kmr";
   const instruction = options.instruct ?? "None";
   const denoisePrefix = refAudioTokens && (options.denoise ?? config.denoise) ? "<|denoise|>" : "";
