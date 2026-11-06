@@ -118,7 +118,7 @@ def main():
         "sampleRate":sample_rate,"preferWebGpu":True,"hiddenSize":1024,"numKvHeads":8,"headDim":128,
         "llmAttention":{"mode":"omnivoice-noncausal","maskDtype":"bool","maskRank":4,"useCache":False},
         "decoderInputName":"codes","decoderOutputName":"waveform_24k",
-        "generation":{"num_audio_codebook":8,"audio_mask_id":1024,"audio_vocab_size":1025,"numStep":32,"guidanceScale":2.0,"tShift":0.1,"layerPenalty":5.0,"positionTemperature":5.0,"classTemperature":0.0,"denoise":True},
+        "generation":{"num_audio_codebook":8,"audio_mask_id":1024,"audio_vocab_size":1025,"numStep":32,"maxTargetTokens":320,"guidanceScale":2.0,"tShift":0.1,"layerPenalty":5.0,"positionTemperature":5.0,"classTemperature":0.0,"denoise":True},
         "sessions":sessions
       }
     }
