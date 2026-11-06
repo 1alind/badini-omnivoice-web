@@ -130,7 +130,9 @@ $("loadBtn").addEventListener("click", async () => {
     $("engineStatus").textContent = "ENGINE OFF";
     $("generationStatus").textContent = "Could not load the model: " + error.message;
   } finally {
-    renderFiles(await readFiles());
+    const latestRows = await readFiles();
+    renderFiles(latestRows);
+    if (engine) $("modelStatus").textContent = "LOADED";
     $("loadBtn").disabled = false;
     $("generateBtn").disabled = !engine || !$("textInput").value.trim();
   }
