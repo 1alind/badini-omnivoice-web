@@ -11,9 +11,9 @@ The app uses four split ONNX graphs:
 - `audio_heads_decoder.onnx`
 - `higgs_decoder.onnx`
 
-The one-time bundle builder exports the fine-tuned backbone into four split ONNX graphs, pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files, then converts only the LLM's constant MatMul weights to mobile INT8. Audio embeddings, audio heads and the Higgs decoder remain FP32. Hayfa's natural sample comes from the fine-tune itself; the additional voice/emotion samples come from `Dezheen89/cosyvoice`. Safari does not need to upload or encode reference audio during generation.
+The one-time bundle builder exports the fine-tuned backbone into four split ONNX graphs, pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files, then dynamically quantizes the LLM's constant MatMul weights to INT8. The quantized graph uses standard ONNX `DynamicQuantizeLinear` and `MatMulInteger` operators, avoiding the custom `MatMulNBits` operator that is unsuitable for the iOS Safari/WASM fallback. Audio embeddings, audio heads and the Higgs decoder remain FP32. Hayfa's natural sample comes from the fine-tune itself; the additional voice/emotion samples come from `Dezheen89/cosyvoice`. Safari does not need to upload or encode reference audio during generation.
 
-The browser runtime uses ONNX Runtime Web. In the mobile INT8 profile, the LLM and Higgs decoder run through WASM, while audio embeddings and audio heads can use WebGPU when available. If the mixed path cannot initialize, all graphs fall back to WASM. Long text is split into shorter generation chunks to keep the per-run token budget bounded on iPad.
+The browser runtime uses ONNX Runtime Web. The mobile INT8 LLM and Higgs decoder are pinned to WASM; audio embeddings and audio heads can use WebGPU on compatible browsers. iOS Safari currently uses the WASM path. Long text is split into shorter generation chunks to keep the per-run token budget bounded on iPad.
 
 ## No inference server
 
@@ -57,7 +57,7 @@ In the repository, open **Settings → Pages**, choose **GitHub Actions** as the
 
 ## Browser and device notes
 
-The target is Safari on the M2 iPad Pro. WebGPU support in iOS Safari and ONNX Runtime's operator coverage must be confirmed on the actual device. The app falls back to WASM CPU if WebGPU initialization fails. Generation speed and peak memory use still need a real iPad test with the exported bundle.
+The target is Safari on the M2 iPad Pro. ONNX Runtime Web currently lists WebGPU as unsupported on iOS Safari, so this project keeps the quantized LLM on WASM and uses WASM for the other graphs there too. Generation speed, peak memory use, and actual speech quality still need a real iPad test with the exported bundle.
 
 ## Licensing
 
