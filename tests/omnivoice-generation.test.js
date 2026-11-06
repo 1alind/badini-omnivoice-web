@@ -153,5 +153,5 @@ test("reference token prompt is inserted between text and generated audio", asyn
   assert.equal(inputs.audioMask[inputs.targetOffset], 1);
   assert.equal(inputs.audioMask[inputs.targetOffset + 2], 1);
   assert.ok(seen[0].startsWith("<|denoise|><|lang_start|>kmr"));
-  assert.ok(seen[1].includes("چۆنی سڵاو"));
+  assert.ok(seen[1].includes("چۆنی. سڵاو"));
 });
