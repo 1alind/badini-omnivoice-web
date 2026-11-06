@@ -132,6 +132,7 @@ export class OmniVoiceEngine {
     this.manifest = manifest; this.runtime = manifest.runtime; this.files = files;
     ort.env.wasm.wasmPaths = new URL("./vendor/ort/", document.baseURI).href;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 1)) : 1;
+    this.threadCount = ort.env.wasm.numThreads;
     onStatus(self.crossOriginIsolated
       ? `Cross-origin isolated · WASM threads: ${ort.env.wasm.numThreads}`
       : "Single-thread WASM. Reload after the app's first visit if you want to enable multi-threading.");
