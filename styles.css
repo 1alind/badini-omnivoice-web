@@ -13,3 +13,5 @@ progress::-webkit-progress-value{background:var(--accent);border-radius:99px}
 progress::-moz-progress-bar{background:var(--accent);border-radius:99px}
 button:disabled{cursor:not-allowed}
 textarea{font-family:inherit}
+
+.file-list{max-height:190px;overflow-y:auto;overscroll-behavior:contain;padding-right:5px}
