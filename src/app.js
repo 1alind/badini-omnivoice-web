@@ -120,7 +120,7 @@ function splitTextIntoChunks(text, referenceText, referenceFrames, maxFrames) {
   const chunks = [];
   let current = "";
   const appendWords = sentence => {
-    for (const word of sentence.trim().split(/\\s+/u).filter(Boolean)) {
+    for (const word of sentence.trim().split(/\s+/u).filter(Boolean)) {
       const pieces = estimateDuration(word, referenceText, referenceFrames) > maxFrames
         ? splitLongWord(word, referenceText, referenceFrames, maxFrames)
         : [word];
