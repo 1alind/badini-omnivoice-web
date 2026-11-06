@@ -79,9 +79,10 @@ function renderFiles(rows) {
   }
   const total = rows.reduce((sum, row) => sum + row.size, 0);
   $("modelStatus").textContent = rows.length ? (missing.length ? "INCOMPLETE" : "READY TO LOAD") : "NOT LOADED";
+  const sessionOnly = rows.filter(row => volatileFiles.has(row.name)).length;
   $("modelStatusText").textContent = rows.length
-    ? `${rows.length} files · ${sizeLabel(total)} stored locally. ${missing.length ? "Missing: " + missing.join(", ") : "Required model files found."}`
-    : "Model files are stored in this browser's local IndexedDB. They are not uploaded.";
+    ? `${rows.length} files · ${sizeLabel(total)}. ${sessionOnly ? sessionOnly + " file(s) are session-only; keep this tab open." : "Stored in browser IndexedDB."} ${missing.length ? "Missing: " + missing.join(", ") : "Required model files found."}`
+    : "Model files stay on this device in browser storage. They are never uploaded.";
   $("loadBtn").disabled = missing.length > 0;
 }
 
