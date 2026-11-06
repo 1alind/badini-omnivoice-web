@@ -297,7 +297,7 @@ function buildSessionPlans(manifest, webGpuAvailable) {
   const profile = manifest.runtime?.qualityProfile
     || manifest.runtimeSource?.qualityProfile
     || manifest.conversion?.targetProfile;
-  const isMobileInt8 = profile === "mobile-int8-weight-only";
+  const isMobileInt8 = profile === "mobile-int8-weight-only" || profile === "mobile-int8-dynamic-wasm";
   const isMobileInt4 = profile === "mobile-int4-weight-only";
   if (isMobileInt8 || isMobileInt4) {
     return [
