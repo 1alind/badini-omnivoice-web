@@ -17,11 +17,11 @@ A static, offline-first web app for generating Badini Kurdish speech using the [
 
 Open the [Colab export notebook](https://colab.research.google.com/github/1alind/badini-omnivoice-web/blob/main/notebooks/export_badini_omnivoice.ipynb) and run its cells.
 
-Default checkpoint: `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The notebook exports the exact fine-tuned checkpoint into four split ONNX graphs, then uses the Higgs codec to pre-encode the Badini speaker reference clips. It downloads small reference WAV/TXT pairs from `Dezheen89/cosyvoice`; these are prompt recordings only, not CosyVoice model weights. The ZIP contains:
-- `audio_embeddings_encoder.onnx` and external weight data
-- `llm_decoder.onnx` and external weight data
-- `audio_heads_decoder.onnx` and external weight data
-- `higgs_decoder.onnx` and external weight data
+Default checkpoint: `Dezheen89/omnivoice-badini` (Badini Kurdish, `kmr`). The notebook exports the exact fine-tuned checkpoint into four split ONNX graphs, uses the Higgs codec to pre-encode the Badini speaker reference clips, then applies validated INT8 weight-only quantization to the LLM MatMul weights. Audio embeddings, audio heads and the Higgs decoder remain FP32. It downloads small reference WAV/TXT pairs from `Dezheen89/cosyvoice`; these are prompt recordings only, not CosyVoice model weights. The ZIP contains:
+- `audio_embeddings_encoder.onnx` and external weight data (FP32)
+- `llm_decoder.onnx` and external weight data (mobile INT8 MatMulNBits)
+- `audio_heads_decoder.onnx` and external weight data (FP32)
+- `higgs_decoder.onnx` and external weight data (FP32, WASM execution)
 - tokenizer JSON files and `manifest.json`
 - pre-encoded speaker prompt token files (`.i32`) and exact transcripts
 
@@ -52,13 +52,13 @@ The app tries to store imported model files in IndexedDB. If Safari's storage qu
 
 - ONNX Runtime Web's current compatibility table lists WASM CPU for Safari on iOS, but still marks its WebGPU execution provider unsupported there. Safari 26 itself has begun exposing the WebGPU API on iOS. The app probes for it and attempts WebGPU, then falls back to WASM if ONNX Runtime or a required operator is unsupported.
 - This model is about 0.6B parameters. FP16 export is the default to reduce file size, but memory use and generation speed still need real-device validation on the target iPad.
-- The browser runtime now follows OmniVoice's four-graph pipeline and rank-4 Boolean non-causal attention contract. The reference audio is pre-encoded during the one-time Colab build, so no audio encoder or server is needed in Safari. It still must be compared against the Python reference output before treating generated speech as fully validated.
+- The browser runtime follows OmniVoice's four-graph pipeline and rank-4 Boolean non-causal attention contract. The reference audio is pre-encoded during the one-time Colab build, so no audio encoder or server is needed in Safari. The mobile INT8 LLM runs through WASM; the Higgs decoder is also pinned to WASM. It still must be compared against the Python reference output before treating generated speech as fully validated.
 - The first export notebook uses a cloud notebook only for conversion. It is not used for speech generation.
 
 ## Project status
 
 The UI, local file import, IndexedDB storage, static runtime bundling, ONNX export script, Colab notebook, and browser inference engine are now in the repository. Remaining validation:
-1. Run the Colab export against the exact checkpoint and validate all four graphs.
+1. Run the Colab export against the exact checkpoint, encode the speaker prompts and validate the mobile INT8 graph.
 2. Confirm the app bundle builds and passes its browser-side unit tests.
 3. Load the exported bundle in Safari on the M2 iPad.
 4. Compare generated Badini WAV output with the Python model's output and fix any numerical or text-preprocessing differences.
