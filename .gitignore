@@ -1,0 +1,5 @@
+models/*
+!models/README.md
+vendor/*
+!vendor/README.md
+.DS_Store
