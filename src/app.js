@@ -170,6 +170,9 @@ $("loadBtn").addEventListener("click", async () => {
     const missing = REQUIRED.filter(name => !files.has(name));
     if (missing.length) throw new Error("Missing files: " + missing.join(", "));
     const manifest = files.has("manifest.json") ? JSON.parse(await files.get("manifest.json").text()) : {};
+    if (manifest.model_id !== "Dezheen89/omnivoice-badini") {
+      throw new Error("Wrong checkpoint bundle. Expected Dezheen89/omnivoice-badini.");
+    }
     for (const definition of Object.values(manifest.runtime?.sessions || {})) {
       if (!files.has(definition.model)) throw new Error("Missing graph file: " + definition.model);
       for (const external of definition.externalData || []) {
@@ -212,7 +215,7 @@ $("loadBtn").addEventListener("click", async () => {
 });
 
 $("clearBtn").addEventListener("click", async () => {
-  engine?.dispose();
+  await engine?.dispose();
   engine = null;
   loadedManifest = null;
   loadedFiles = new Map();
