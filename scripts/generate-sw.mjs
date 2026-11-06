@@ -43,6 +43,8 @@ self.addEventListener("fetch", event => {
     const response = cached || await fetch(request);
     if (!cached && response.ok && response.type === "basic") cache.put(request, response.clone());
     const headers = new Headers(response.headers);
+    headers.delete("Content-Encoding");
+    headers.delete("Content-Length");
     headers.set("Cross-Origin-Resource-Policy", "same-origin");
     if (request.mode === "navigate") {
       headers.set("Cross-Origin-Opener-Policy", "same-origin");
