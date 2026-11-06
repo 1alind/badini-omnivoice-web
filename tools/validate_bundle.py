@@ -92,6 +92,17 @@ def main():
         raise SystemExit("ERROR: no usable Badini speaker reference prompts")
     if runtime.get("llmAttention", {}).get("mode") != "omnivoice-noncausal":
         raise SystemExit("ERROR: manifest does not declare OmniVoice non-causal attention")
+    quantization = manifest.get("quantization")
+    if quantization and quantization.get("bits") == 8:
+        llm = onnx.load(str(root / "llm_decoder.onnx"), load_external_data=False)
+        nbits = sum(1 for node in llm.graph.node if node.domain == "com.microsoft" and node.op_type == "MatMulNBits")
+        if nbits == 0:
+            raise SystemExit("ERROR: manifest claims INT8 but the LLM graph has no MatMulNBits nodes")
+        if sessions["llm"].get("executionProvider") != "wasm":
+            raise SystemExit("ERROR: mobile INT8 LLM must use the WASM execution provider")
+        if sessions["higgsDecoder"].get("executionProvider") != "wasm":
+            raise SystemExit("ERROR: Higgs decoder must use WASM for the validated audio path")
+        print(f"OK: mobile INT8 LLM · MatMulNBits nodes={nbits}")
     total = sum(path.stat().st_size for path in root.iterdir() if path.is_file())
     print(f"\nBundle validation passed. Voice prompts: {valid}; files: {sum(1 for p in root.iterdir() if p.is_file())}; size: {total / 1e9:.2f} GB")
 
