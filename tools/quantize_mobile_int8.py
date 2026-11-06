@@ -22,18 +22,12 @@ import numpy as np
 import onnx
 import onnxruntime as ort
 from onnx import TensorProto
-from onnxruntime.quantization.matmul_nbits_quantizer import (
-    DefaultWeightOnlyQuantConfig,
-    MatMulNBitsQuantizer,
-)
-from onnxruntime.quantization.quant_utils import QuantFormat
+from onnxruntime.quantization import QuantType, quantize_dynamic
 
 
 BITS = 8
-SUPPORTED_BITS = (4, 8)
-BLOCK_SIZE = 128
-# Keep activations in FP32. The mobile experiment is weight-only.
-ACCURACY_LEVEL = 1
+# Dynamic INT8 uses standard ONNX operators (DynamicQuantizeLinear + MatMulInteger)
+# so the model can run in ONNX Runtime Web's WASM backend on iOS Safari.
 MAX_RELATIVE_RMSE = 0.05
 MIN_COSINE_SIMILARITY = 0.995
 MAX_RELEASE_ASSET_BYTES = 1_800_000_000
@@ -158,23 +152,29 @@ def external_locations(model_path: Path) -> set[str]:
     return locations
 
 
-def validate_mobile_graph(model_path: Path, bits: int = BITS) -> int:
+def validate_mobile_graph(model_path: Path) -> int:
     validate_llm_attention_contract(model_path)
     model = onnx.load(str(model_path), load_external_data=False)
-    quantized = [node for node in model.graph.node if node.domain == "com.microsoft" and node.op_type == "MatMulNBits"]
-    if not quantized:
-        raise RuntimeError("Mobile LLM contains no MatMulNBits nodes")
-    for node in quantized:
-        node_bits = node_int_attribute(node, "bits")
-        block_size = node_int_attribute(node, "block_size")
-        accuracy_level = node_int_attribute(node, "accuracy_level")
-        if node_bits != bits:
-            raise RuntimeError(f"Unexpected MatMulNBits bits={node_bits} in {node.name!r}; expected {bits}")
-        if block_size != BLOCK_SIZE:
-            raise RuntimeError(f"Unexpected MatMulNBits block_size={block_size} in {node.name!r}")
-        if accuracy_level != ACCURACY_LEVEL:
-            raise RuntimeError(f"Unexpected MatMulNBits accuracy_level={accuracy_level} in {node.name!r}")
-    return len(quantized)
+    matmul_integer = [
+        node for node in model.graph.node
+        if node.domain in ("", "ai.onnx") and node.op_type == "MatMulInteger"
+    ]
+    dynamic_quantize = [
+        node for node in model.graph.node
+        if node.domain in ("", "ai.onnx") and node.op_type == "DynamicQuantizeLinear"
+    ]
+    unsupported_nbits = [
+        node for node in model.graph.node
+        if node.domain == "com.microsoft" and node.op_type == "MatMulNBits"
+    ]
+    if unsupported_nbits:
+        raise RuntimeError("WASM release cannot contain com.microsoft::MatMulNBits")
+    if not matmul_integer or not dynamic_quantize:
+        raise RuntimeError(
+            "Mobile LLM must use standard ONNX DynamicQuantizeLinear + MatMulInteger; "
+            f"found MatMulInteger={len(matmul_integer)}, DynamicQuantizeLinear={len(dynamic_quantize)}"
+        )
+    return len(matmul_integer)
 
 
 def make_session(model_path: Path) -> ort.InferenceSession:
@@ -252,22 +252,21 @@ def verify_equivalence(
     return metrics
 
 
-def quantize_llm(source_model: Path, output_model: Path, bits: int = BITS) -> None:
-    if bits not in SUPPORTED_BITS:
-        raise RuntimeError(f"Unsupported MatMulNBits width: {bits}")
-    config = DefaultWeightOnlyQuantConfig(
-        block_size=BLOCK_SIZE,
-        is_symmetric=True,
-        accuracy_level=ACCURACY_LEVEL,
-        quant_format=QuantFormat.QOperator,
-        op_types_to_quantize=("MatMul",),
-        bits=bits,
-    )
-    quantizer = MatMulNBitsQuantizer(str(source_model), algo_config=config)
-    quantizer.process()
+def quantize_llm(source_model: Path, output_model: Path) -> None:
     output_model.parent.mkdir(parents=True, exist_ok=True)
-    quantizer.model.save_model_to_file(str(output_model), True)
-    del quantizer
+    quantize_dynamic(
+        model_input=str(source_model),
+        model_output=str(output_model),
+        op_types_to_quantize=["MatMul"],
+        per_channel=True,
+        reduce_range=False,
+        weight_type=QuantType.QInt8,
+        use_external_data_format=True,
+        extra_options={
+            "MatMulConstBOnly": True,
+            "WeightSymmetric": True,
+        },
+    )
     gc.collect()
     split_oversized_external_data(output_model)
 
@@ -285,7 +284,7 @@ def replace_release_llm(release: Path, quantized_model: Path) -> None:
         shutil.copy2(source, destination)
 
 
-def update_runtime_manifest(release: Path, bits: int, node_count: int, metrics: dict[str, dict[str, float]]) -> None:
+def update_runtime_manifest(release: Path, node_count: int, metrics: dict[str, dict[str, float]]) -> None:
     manifest_path = release / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     llm_path = release / "llm_decoder.onnx"
@@ -295,14 +294,15 @@ def update_runtime_manifest(release: Path, bits: int, node_count: int, metrics: 
     llm["executionProvider"] = "wasm"
     # Keep the Higgs decoder on WASM for the known-good audio decode path.
     manifest["runtime"]["sessions"]["higgsDecoder"]["executionProvider"] = "wasm"
-    manifest["runtime"]["qualityProfile"] = f"mobile-int{bits}-weight-only"
-    manifest["precision"] = f"fp32-components-int{bits}-llm"
+    manifest["runtime"]["qualityProfile"] = "mobile-int8-dynamic-wasm"
+    manifest["precision"] = "fp32-components-int8-dynamic-llm"
     manifest["quantization"] = {
         "scope": "llm-only",
-        "bits": bits,
-        "block_size": BLOCK_SIZE,
-        "accuracy_level": ACCURACY_LEVEL,
-        "matmul_nbits_nodes": node_count,
+        "format": "ONNX DynamicQuantizeLinear + MatMulInteger",
+        "bits": 8,
+        "weight_type": "int8",
+        "matmul_integer_nodes": node_count,
+        "execution_provider": "wasm",
         "equivalence": metrics,
     }
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -312,7 +312,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--work-dir", required=True)
     parser.add_argument("--release-dir", required=True)
-    parser.add_argument("--bits", type=int, choices=SUPPORTED_BITS, default=BITS)
+    parser.add_argument("--bits", type=int, choices=(8,), default=BITS)
     args = parser.parse_args()
     work = Path(args.work_dir).resolve()
     release = Path(args.release_dir).resolve()
@@ -321,41 +321,18 @@ def main() -> None:
     if not source_model.is_file() or not case_path.is_file():
         raise RuntimeError("FP32 LLM export and llm_equiv.npz must exist before mobile quantization")
 
-    bits = int(args.bits)
-    profile = f"mobile-int{bits}"
-    output_dir = work / f"{profile}-llm"
+    output_dir = work / "mobile-int8-dynamic-llm"
     shutil.rmtree(output_dir, ignore_errors=True)
     output_model = output_dir / "llm_decoder.onnx"
-    quantize_llm(source_model, output_model, bits)
-    node_count = validate_mobile_graph(output_model, bits)
-    # INT8 is the already-accepted mobile release path, so preserve its
-    # historical numerical gate. INT4 is experimental: record the same
-    # metrics, but do not block sample generation/publication on an arbitrary
-    # PoC threshold. Audio/browser quality is evaluated from the produced build.
-    metrics = verify_equivalence(output_model, case_path, bits, enforce_safety=bits == 8)
-    advisory_safety_passed = equivalence_within_safety(metrics)
-    (work / f"{profile}-quantization.json").write_text(
-        json.dumps(
-            {
-                "bits": bits,
-                "blockSize": BLOCK_SIZE,
-                "symmetric": True,
-                "accuracyLevel": ACCURACY_LEVEL,
-                "matMulNBitsNodes": node_count,
-                "equivalence": metrics,
-                "advisorySafetyEnvelopePassed": advisory_safety_passed,
-            },
-            indent=2,
-        ) + "\n",
-        encoding="utf-8",
-    )
+    quantize_llm(source_model, output_model)
+    node_count = validate_mobile_graph(output_model)
+    metrics = verify_equivalence(output_model, case_path, BITS, enforce_safety=True)
     replace_release_llm(release, output_model)
-    validate_mobile_graph(release / "llm_decoder.onnx", bits)
-    update_runtime_manifest(release, bits, node_count, metrics)
+    validate_mobile_graph(release / "llm_decoder.onnx")
+    update_runtime_manifest(release, node_count, metrics)
     print(
-        f"Mobile LLM quantization PASS: MatMulNBits={node_count}, bits={bits}, "
-        f"block={BLOCK_SIZE}, accuracy_level={ACCURACY_LEVEL}, "
-        f"advisory_safety_passed={advisory_safety_passed}, metrics={metrics}"
+        f"Mobile WASM INT8 quantization PASS: MatMulInteger={node_count}, "
+        f"DynamicQuantizeLinear, metrics={metrics}"
     )
 
 
