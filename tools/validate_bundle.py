@@ -71,8 +71,11 @@ def main():
         path = root / filename
         if not path.is_file():
             raise SystemExit(f"ERROR: {filename} is missing")
-        if filename.endswith(".json"):
-            json.loads(path.read_text(encoding="utf-8"))
+        json.loads(path.read_text(encoding="utf-8"))
+
+    for filename in ("BADINI_MODEL_CARD.md", "OMNIVOICE_MODEL_CARD.md", "HIGGS_AUDIO_LICENSE.txt"):
+        if not (root / filename).is_file():
+            raise SystemExit(f"ERROR: upstream license/provenance file {filename} is missing")
 
     prompts = manifest.get("reference_prompts", [])
     valid = 0
