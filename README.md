@@ -16,7 +16,7 @@ The app uses four split ONNX graphs: `audio_embeddings_encoder.onnx`, `llm_decod
 
 The one-time bundle builder exports the fine-tuned backbone into four split ONNX graphs, pre-encodes the Hayfa, Abdullah, and Bafreen reference audio samples into local `.i32` prompt-token files, then dynamically quantizes the LLM's constant MatMul weights to INT8. The quantized graph uses standard ONNX `DynamicQuantizeLinear` and `MatMulInteger` operators. Audio embeddings, audio heads and the Higgs decoder remain FP32. Hayfa's natural sample comes from the Badini fine-tune; additional voice/emotion samples come from `Dezheen89/cosyvoice`.
 
-The browser runtime uses ONNX Runtime Web. The mobile INT8 LLM and Higgs decoder are pinned to WASM; other graphs may use WebGPU where supported. iOS Safari currently uses the WASM path. Generation speed, peak memory use, and speech quality still need a real iPad test with the exported bundle.
+The browser runtime uses ONNX Runtime Web. The mobile INT8 LLM and Higgs decoder are pinned to WASM; the audio embedding and audio-head graphs try WebGPU when the browser exposes it, then fall back to all-WASM if that path fails. iOS Safari WebGPU availability is not assumed. Generation speed, peak memory use, and speech quality still need a real iPad test with the exported bundle.
 
 ## No inference server
 
