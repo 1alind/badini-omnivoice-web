@@ -204,7 +204,12 @@ export async function prepareOmniVoiceInputs(text, tokenizer, config, options = 
   const [styleEncoded, textEncoded] = await Promise.all([tokenizer.encode(styleText), tokenizer.encode(wrappedText)]);
   const styleIds = Array.from(styleEncoded.ids, Number);
   const textIds = Array.from(textEncoded.ids, Number);
-  const targetLength = Math.max(1, Math.min(options.maxTargetTokens ?? 360, options.targetTokens ?? estimateDuration(normalizedText, refText, refFrames || 25)));
+  const estimatedLength = Math.max(1, options.targetTokens ?? estimateDuration(normalizedText, refText, refFrames || 25));
+  const maxTargetTokens = options.maxTargetTokens ?? 700;
+  if (estimatedLength > maxTargetTokens) {
+    throw new Error("This text is too long for one generation on this device. Split it into shorter paragraphs and generate them separately.");
+  }
+  const targetLength = estimatedLength;
   const targetOffset = styleIds.length + textIds.length + refFrames;
   const sequenceLength = targetOffset + targetLength;
   const inputIds = new BigInt64Array(codebooks * sequenceLength);
